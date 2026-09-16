@@ -259,7 +259,7 @@ extension ContentView {
     private func startCreate() {
         createButtonSubmitted = true
         Task {
-            let created = await model.create()
+            let created = await model.createWineEngine()
             createButtonSubmitted = false
             if created {
                 step = .complete
@@ -269,13 +269,11 @@ extension ContentView {
 
     private func selectRecommendedInstall() {
         guard model.selectedModOrganizerExecutableFound, model.driveMappingReady else { return }
-        model.useRecommendedD3DMetalPreset()
         installMode = .defaultInstall
         step = .create
     }
 
     private func selectAdvancedInstall() {
-        model.useRecommendedD3DMetalPreset()
         installMode = .advanced
         step = .setup
     }

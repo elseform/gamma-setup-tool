@@ -39,23 +39,11 @@ final class OutputBuffer: @unchecked Sendable {
 final class AppModel: ObservableObject {
     @Published var appName = "stalker-gamma"
     @Published var installDirectory = SetupConfiguration.defaultInstallDirectory
-    @Published var engine = SetupConfiguration.defaultEngine
-    @Published var renderer = "d3dmetal"
-    @Published var updateUSVFS = true
-    @Published var installGPTK4Binaries = true
-    @Published var installDXMTBinaries = false
-    @Published var installDirectXBinaries = false
-    @Published var compatibilityProfile: SetupCompatibilityProfile = .xrayD3DMetal
     @Published var programBatch = "/mo2.bat"
     @Published var launchBatches: [LaunchBatch] = []
     @Published var launchArguments = ""
     @Published var saveVerboseLog = true
-    @Published var driveMappingMode = "shorten"
-    @Published var displayMode = "defaultWine"
     @Published var manualModOrganizerPath = ""
-    @Published var modOrganizerSelectionError = ""
-    @Published var preflight: Preflight?
-    @Published var preflightError = ""
     @Published var logText = ""
     @Published var savedLogPath = ""
     @Published var statusText = "Ready"
@@ -69,15 +57,13 @@ final class AppModel: ObservableObject {
     var receivedInstallStageEvents = false
     var pendingEngineEventText = ""
 
-    @Published var winetricks: [String] = SetupCompatibilityProfile.xrayD3DMetal.requiredVerbs
-    @Published var additionalWinetricks = ""
-    @Published var recommendedSettings = RecommendedSettings()
-
-    var requiredWinetricks: [String] {
-        let base = winetricks
-        let extra = additionalWinetricks.split(separator: " ").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        return base + extra
-    }
+    // gamma-wine-engine-backed pipeline (create-wine-engine) — the only
+    // pipeline this app drives. appName/installDirectory/saveVerboseLog and
+    // the MO2 detection above (manualModOrganizerPath/selectedLaunchExecutablePath)
+    // are reused as-is. Backend is hardcoded to "dxmt" and runtime-mode to
+    // "redist" in wineEngineRequest() (AppModel+Engine.swift) — no fields
+    // here for either, there's no choice to expose.
+    @Published var wineEngineArchivePath = ""
 
     init() {
         loadSettings()

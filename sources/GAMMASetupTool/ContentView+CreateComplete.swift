@@ -112,33 +112,23 @@ struct CreatePage: View {
         }
     }
 
+    // Stage numbers (0-6) match SetupEngineStage's declaration order
+    // (dependencies/wrapper/engine/prefix/driveMapping/winetricks/finalize)
+    // — interactive_setup.py emits that same schema directly (see
+    // gamma-wine-engine/scripts/interactive_setup.py and
+    // WineEngineSetup.swift), so the checkmark/progress mapping below still
+    // works unchanged; only the row labels needed to stop describing the
+    // Sikarugir pipeline.
     private var installStageRows: [(stage: Int, title: String, detail: String)] {
-        var rows: [(stage: Int, title: String, detail: String)] = [
-            (0, "Sikarugir", "Checking Sikarugir"),
+        [
+            (0, "Preparing", "Resolving engine archive"),
             (1, model.wrapperStageTitle, ""),
-            (2, "Engine", model.engineLabel)
+            (2, "Engine", "Extracting DXMT engine"),
+            (3, "Prefix", "Bootstrapping Wine prefix"),
+            (4, "Drive mapping", model.plannedWineDriveMapping),
+            (5, "Runtime dependencies", "Redist (bundled DLLs)"),
+            (6, "Finalize", "Signing, registering & checking USVFS")
         ]
-        if model.updateUSVFS {
-            rows.append((2, SetupOptionCopy.usvfsBinaries, SetupOptionCopy.installBundledAction))
-        }
-        if model.installGPTK4Binaries {
-            rows.append((2, SetupOptionCopy.gptkBinaries, SetupOptionCopy.installAction))
-        }
-        if model.installDXMTBinaries {
-            rows.append((2, SetupOptionCopy.dxmtBinaries, SetupOptionCopy.installAction))
-        }
-        if model.installDirectXBinaries {
-            rows.append((2, SetupOptionCopy.dxBinaries, SetupOptionCopy.installAction))
-        }
-        rows.append((3, "Prefix", "Creating prefix"))
-        if model.driveMappingMode == "shorten" {
-            rows.append((4, "Setting drive mapping", model.plannedWineDriveMapping))
-        }
-        rows += [
-            (5, "Winetricks", model.requiredWinetricksSummary),
-            (6, "Finalize", "")
-        ]
-        return rows
     }
 
     private func installStageRow(row: (stage: Int, title: String, detail: String)) -> some View {

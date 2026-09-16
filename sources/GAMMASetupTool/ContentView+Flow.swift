@@ -79,7 +79,9 @@ struct WrapperNamePage: View {
                 status: "",
                 ok: model.selectedModOrganizerExecutableFound,
                 warning: true,
-                detail: model.selectedLaunchExecutablePath
+                detail: model.selectedModOrganizerExecutableFound
+                    ? model.selectedLaunchExecutablePath
+                    : "Not found — click Choose\u{2026} to locate it"
             ) {
                 Button(model.selectedModOrganizerExecutableFound ? "Change…" : "Choose…") {
                     model.chooseLaunchExecutable()

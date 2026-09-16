@@ -9,21 +9,75 @@ import GAMMASetupCore
 extension AppModel {
     // MARK: - Request Construction
 
-    func engineRequest() -> SetupRequest {
-        var request = configuration.setupRequest
-        request.resourceRoot = AppResources.bundle.resourceURL?.path ?? Bundle.main.resourceURL?.path ?? ""
-        if let icon = AppResources.bundle.url(forResource: "Anomaly", withExtension: "icns")
-            ?? Bundle.main.url(forResource: "Anomaly", withExtension: "icns") {
-            request.appIconSource = icon.path
-        }
-        return request
+    /// Reuses the existing MO2 detection (`selectedLaunchExecutablePath`,
+    /// already correct for both the auto-detected and custom-exe cases) and
+    /// appName/installDirectory fields. Backend is hardcoded to "dxmt": the
+    /// current known-good archive (CX26W11-GAMMA-DXMT-5.tar.zst, per
+    /// gamma-wine-engine's own DXMT-suffixed naming) has no D3DMetal
+    /// payload at all (`lib64/apple_gptk` is empty) — selecting it would
+    /// hard-fail interactive_setup.py's own backend-presence check.
+    /// Revisit once a build with both backends is the one in use. No
+    /// runtime-mode or dxmt-only choice either: redist is simply better (no
+    /// network access needed) and there's no reason to expose winetricks
+    /// verbs as an alternative; dxmt-only only matters for
+    /// interactive_setup.py's own *interactive* prompt-skipping —
+    /// irrelevant here since backend and runtime-mode are always passed
+    /// explicitly as flags.
+    ///
+    /// `gammaRoot` is computed directly from the resolved MO2 path — two
+    /// directory levels up (MO2's own folder, then that folder's parent) —
+    /// NOT from `preflight?.shortWineDriveRoot`. That field looked correct
+    /// on paper (same computation, `zShortRoot`, one level above MO2's own
+    /// folder so `ModOrganizer.ini`'s own stored `gamePath=G:\anomaly`-style
+    /// paths resolve once mounted) but `model.preflight` is never actually
+    /// populated anywhere in this app — the `gamma-setup-engine preflight`
+    /// command exists but nothing calls it, so it's always nil. Confirmed
+    /// live: it silently produced an empty `gammaRoot`, which then resolved
+    /// to the *process's own working directory* (this app's own
+    /// Contents/Resources) instead of erroring, since `URL(fileURLWithPath:
+    /// "")` defaults to cwd. Computing directly here avoids depending on
+    /// that dead code path entirely. Also makes the drive letter actually
+    /// stored in a given user's `ModOrganizer.ini` (`Z:` for most, `G:` for
+    /// some) a non-issue without any extra detection: `interactive_setup.py`
+    /// always mounts *both* Z: (host root) and G: (this resolved root)
+    /// unconditionally, so whichever one a given ini already references
+    /// just resolves.
+    func wineEngineRequest() -> WineEngineSetupRequest {
+        let mo2URL = URL(fileURLWithPath: selectedLaunchExecutablePath)
+        let gammaRoot = selectedLaunchExecutableFound
+            ? mo2URL.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path
+            : ""
+        return WineEngineSetupRequest(
+            archivePath: wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil : wineEngineArchivePath,
+            releaseArchiveURL: nil,
+            appName: appName,
+            appParent: installDirectory,
+            gammaRoot: gammaRoot,
+            mo2Path: selectedLaunchExecutablePath,
+            exeRelPath: nil,
+            backend: "dxmt",
+            runtimeMode: "redist",
+            // Also threads into the generated paths.json (dxmtOnly), which
+            // Configurator.app reads to decide whether to show the D3DMetal
+            // backend option at all (ConfiguratorView.swift's
+            // `case .backend where model.dxmtOnly`) — leaving this false
+            // showed a picker offering a backend the archive doesn't
+            // actually have a payload for.
+            dxmtOnly: true,
+            yes: true,
+            skipFinderAlias: false,
+            forceExe: false,
+            updateUSVFS: true,
+            usvfsSource: SetupDefaults.defaultUSVFSSource
+        )
     }
 
     // MARK: - Process Execution
 
-    func runEngine(
+    func runEngine<Request: Encodable>(
         command: String,
-        request: SetupRequest,
+        request: Request,
         extraArguments: [String] = [],
         stream: Bool
     ) async throws -> ToolResult {
@@ -126,6 +180,16 @@ extension AppModel {
             }
             switch event.type {
             case .stageStarted:
+                // Reaching stage N implies every earlier stage already
+                // happened, even ones this particular pipeline never emits
+                // its own stageStarted/stageFinished for (interactive_setup.py's
+                // first-ever event is "engine", index 2 — it has nothing to
+                // say about "dependencies"/"wrapper", indices 0/1) — without
+                // this, those rows stay permanently unchecked even though
+                // the install has clearly already passed them.
+                if index > 0 {
+                    installStageCompletedIndex = max(installStageCompletedIndex, index - 1)
+                }
                 installStageIndex = index
                 statusText = installStageName(at: index)
             case .stageFinished:
@@ -159,65 +223,18 @@ extension AppModel {
         }
     }
 
-    private func inferredInstallStageIndex(from status: String) -> Int {
-        let status = status.lowercased()
-        if status.contains("installing sikarugir homebrew tap")
-            || status.contains("installing sikarugir creator")
-            || status.contains("sikarugir template")
-            || status.contains("downloading sikarugir engine") {
-            return 0
-        }
-        if status.contains("creating sikarugir wrapper")
-            || status.contains("rebuilding")
-            || status.contains("configuring existing")
-            || status.contains("installing anomaly app icon")
-            || status.contains("restoring sikarugir app frameworks")
-            || status.contains("configuring sikarugir app plist")
-            || status.contains("configure alias") {
-            return 1
-        }
-        if status.contains("installing sikarugir engine")
-            || status.contains("usvfs")
-            || status.contains("gptk4") {
-            return 2
-        }
-        if status.contains("initializing sikarugir wine prefix")
-            || status.contains("configuring wine macos graphics driver") {
-            return 3
-        }
-        if status.contains("configuring wine drive mapping")
-            || status.contains("modorganizer.ini") {
-            return 4
-        }
-        if status.contains("winetricks")
-            || status.contains("vcrun2026")
-            || status.contains("directx")
-            || status.contains("dll overrides") {
-            return 5
-        }
-        if status.contains("modorganizer launch batch")
-            || status.contains("launch batches")
-            || status.contains("normalizing")
-            || status.contains("registering")
-            || status.contains("summary")
-            || status.contains("touching") {
-            return 6
-        }
-        return installStageIndex
-    }
-
     var installStageCount: Int {
         7
     }
 
     func installStageName(at index: Int) -> String {
         switch index {
-        case 0: return "Sikarugir installation"
+        case 0: return "preparing"
         case 1: return "wrapper creation"
-        case 2: return "engine installation"
+        case 2: return "engine extraction"
         case 3: return "prefix initialization"
         case 4: return "drive mapping"
-        case 5: return "winetricks"
+        case 5: return "installing redist DLLs"
         case 6: return "finalizing"
         default: return "setup"
         }

@@ -7,39 +7,17 @@ import GAMMASetupCore
 #endif
 
 extension AppModel {
-    // MARK: - Wrapper Status
-
-    var requiredWinetricksSummary: String {
-        requiredWinetricks.joined(separator: ", ")
-    }
-
-    var winetricksWrapperState: WinetricksWrapperState {
-        .planned
-    }
-
     // MARK: - Configuration
 
     var configuration: SetupConfiguration {
         SetupConfiguration(
             appName: appName,
             installDirectory: installDirectory,
-            engine: engine,
-            renderer: renderer,
-            updateUSVFS: updateUSVFS,
-            installGPTK4Binaries: installGPTK4Binaries,
-            installDXMTBinaries: installDXMTBinaries,
-            installDirectXBinaries: installDirectXBinaries,
-            compatibilityProfile: compatibilityProfile,
             programBatch: programBatch,
             launchBatches: launchBatches,
             launchArguments: launchArguments,
             saveVerboseLog: saveVerboseLog,
-            driveMappingMode: driveMappingMode,
-            displayMode: displayMode,
-            manualModOrganizerPath: manualModOrganizerPath,
-            winetricks: winetricks,
-            additionalWinetricks: additionalWinetricks,
-            preflight: preflight
+            manualModOrganizerPath: manualModOrganizerPath
         )
     }
 
@@ -64,14 +42,6 @@ extension AppModel {
 
     var wrapperStageTitle: String {
         "Create wrapper"
-    }
-
-    var rendererLabel: String {
-        configuration.rendererLabel
-    }
-
-    var engineLabel: String {
-        configuration.engineLabel
     }
 
     var environmentOK: Bool {
@@ -110,6 +80,7 @@ extension AppModel {
             && wrapperNameIsValid
             && selectedLaunchExecutableFound
             && configuration.launchArgumentsAreValid
+            && !wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var selectedModOrganizerExecutableFound: Bool {
@@ -140,24 +111,6 @@ extension AppModel {
             return "Selected executable was not found."
         }
         return "The executable and flags are written to the wrapper's launch batch."
-    }
-
-    var selectedModOrganizerDetail: String {
-        let trimmed = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        if selectedModOrganizerExecutableFound {
-            return trimmed
-        }
-        if !modOrganizerSelectionError.isEmpty {
-            return modOrganizerSelectionError
-        }
-        if !trimmed.isEmpty {
-            return "ModOrganizer.exe not found at \(trimmed)"
-        }
-        return "Select the folder that contains ModOrganizer.exe."
-    }
-
-    var canInstallComponents: Bool {
-        configuration.canInstallComponents
     }
 
     var requiredToolsOK: Bool {
@@ -196,65 +149,21 @@ extension AppModel {
     }
 
     var minimalSetupSummaryItems: [SetupSummaryItem] {
-        var rows = [
-            SetupSummaryItem(label: "App", planned: outputAppPath),
-            SetupSummaryItem(label: "ModOrganizer", planned: configuration.selectedLaunchExecutablePath),
-            SetupSummaryItem(label: "Engine", planned: engineLabel),
-            SetupSummaryItem(label: "Renderer", planned: rendererLabel)
-        ]
-        if installGPTK4Binaries {
-            rows.append(SetupSummaryItem(label: SetupOptionCopy.gptkBinaries, planned: SetupOptionCopy.installAction))
-        }
-        if installDXMTBinaries {
-            rows.append(SetupSummaryItem(label: SetupOptionCopy.dxmtBinaries, planned: SetupOptionCopy.installAction))
-        }
-        if installDirectXBinaries {
-            rows.append(SetupSummaryItem(label: SetupOptionCopy.dxBinaries, planned: SetupOptionCopy.installAction))
-        }
-        if updateUSVFS {
-            rows.append(SetupSummaryItem(label: SetupOptionCopy.usvfsBinaries, planned: SetupOptionCopy.installBundledAction))
-        }
-        rows.append(SetupSummaryItem(label: "Settings", planned: "X-Ray D3DMetal (Recommended)"))
-        return rows
+        makeSetupSummaryItems()
     }
 
     func makeSetupSummaryItems() -> [SetupSummaryItem] {
         var rows: [SetupSummaryItem] = []
 
         func add(_ label: String, _ planned: String) {
-            rows.append(SetupSummaryItem(
-                label: label,
-                planned: planned
-            ))
+            rows.append(SetupSummaryItem(label: label, planned: planned))
         }
 
         add("App", outputAppPath)
         add("Executable", configuration.selectedLaunchExecutablePath)
-        let arguments = launchArguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !arguments.isEmpty {
-            add("Flags", arguments)
-        }
-        add("Engine", engineLabel)
-        add("Renderer", rendererLabel)
-
-        if driveMappingMode == "shorten" {
-            add("Drive mapping", plannedWineDriveMapping)
-        }
-
-        if displayMode == "retinaOff" {
-            add("Wine display", "Force Retina off")
-        }
-
-        if updateUSVFS {
-            add(SetupOptionCopy.usvfsBinaries, SetupOptionCopy.installBundledAction)
-        }
-        if installGPTK4Binaries {
-            add(SetupOptionCopy.gptkBinaries, SetupOptionCopy.installAction)
-        }
-        if installDXMTBinaries {
-            add(SetupOptionCopy.dxmtBinaries, SetupOptionCopy.installAction)
-        }
-
+        add("Engine archive", wineEngineArchivePath.isEmpty ? "Not selected" : wineEngineArchivePath)
+        add("Backend", "DXMT")
+        add(SetupOptionCopy.usvfsBinaries, "Checked automatically, updated if outdated")
         if saveVerboseLog {
             add(SetupOptionCopy.logTitle, SetupOptionCopy.logAction)
         }
@@ -268,13 +177,6 @@ extension AppModel {
 
     var driveMappingReady: Bool {
         configuration.driveMappingReady
-    }
-
-    var gammaFolderSelectionError: String? {
-        let trimmed = preflightError.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        guard trimmed.localizedCaseInsensitiveContains("ModOrganizer.exe not found") else { return nil }
-        return "Selected folder is not a valid MO2 folder. Select the path that contains ModOrganizer.exe."
     }
 
     var environmentMessage: String {

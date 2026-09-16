@@ -6,29 +6,13 @@ import GAMMASetupCore
 
 struct SetupConfiguration {
     static let defaultInstallDirectory = AppSettingsStore.defaultInstallDirectory
-    static let defaultEngine = SetupDefaults.defaultEngine
-    static let crossOverEngine = SetupDefaults.crossOverEngine
-    static let sikarugir10Engine = SetupDefaults.sikarugir10Engine
-    static let supportedEngines = SetupDefaults.supportedEngines
     var appName = "stalker-gamma"
     var installDirectory = SetupConfiguration.defaultInstallDirectory
-    var engine = SetupConfiguration.defaultEngine
-    var renderer = "d3dmetal"
-    var updateUSVFS = true
-    var installGPTK4Binaries = true
-    var installDXMTBinaries = false
-    var installDirectXBinaries = false
-    var compatibilityProfile: SetupCompatibilityProfile = .xrayD3DMetal
     var programBatch = "/mo2.bat"
     var launchBatches: [LaunchBatch] = []
     var launchArguments = ""
     var saveVerboseLog = true
-    var driveMappingMode = "shorten"
-    var displayMode = "defaultWine"
     var manualModOrganizerPath = ""
-    var winetricks: [String] = SetupCompatibilityProfile.xrayD3DMetal.requiredVerbs
-    var additionalWinetricks = ""
-    var preflight: Preflight?
 
     var outputAppPath: String {
         let cleanName = appName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -51,9 +35,7 @@ struct SetupConfiguration {
     var selectedLaunchExecutablePath: String {
         if programBatch == "/mo2.bat" {
             let manualPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !manualPath.isEmpty { return manualPath }
-            if let detectedPath = preflight?.mo2Path, !detectedPath.isEmpty { return detectedPath }
-            return "ModOrganizer.exe"
+            return manualPath.isEmpty ? "ModOrganizer.exe" : manualPath
         }
         return launchBatches.first { $0.batchPath == programBatch }?.executablePath ?? programBatch
     }
@@ -65,7 +47,11 @@ struct SetupConfiguration {
 
     var selectedLaunchExecutableFound: Bool {
         if programBatch == "/mo2.bat" {
-            return selectedModOrganizerExecutableFound
+            // manualModOrganizerPath is the only source now (no more
+            // preflight-detected fallback — that field was always nil in
+            // practice, see AppModel+Engine.swift's wineEngineRequest()
+            // comment for the full story).
+            return AppSettingsStore.isValidModOrganizerExecutable(selectedLaunchExecutablePath)
         }
         let path = selectedLaunchExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
         return URL(fileURLWithPath: path).pathExtension.caseInsensitiveCompare("exe") == .orderedSame
@@ -76,26 +62,6 @@ struct SetupConfiguration {
         !SetupLaunchBatchTools.containsLineBreak(launchArguments)
     }
 
-    var rendererLabel: String {
-        switch renderer {
-        case "dxmt":
-            return "DXMT"
-        case "dxvk":
-            return "DXVK"
-        default:
-            return "D3DMetal"
-        }
-    }
-
-    var engineLabel: String {
-        switch engine {
-        case Self.crossOverEngine:
-            return "Wine CX 24.0.7"
-        default:
-            return "Wine Sikarugir 10.0"
-        }
-    }
-
     var environmentOK: Bool {
         selectedModOrganizerExecutableFound
     }
@@ -104,63 +70,35 @@ struct SetupConfiguration {
         true
     }
 
+    // Every other gate in the app (ContentView+Setup.swift,
+    // ContentView+Navigation.swift, ContentView+Flow.swift,
+    // AppModel+Computed.swift) reads this by name expecting "is a launch
+    // target currently properly selected" — MO2 by default, or a custom
+    // exe override.
     var selectedModOrganizerExecutableFound: Bool {
-        AppSettingsStore.isValidModOrganizerExecutable(manualModOrganizerPath)
+        selectedLaunchExecutableFound
     }
 
     var createFlowEnvironmentOK: Bool {
         selectedModOrganizerExecutableFound
     }
 
-    var canInstallComponents: Bool {
-        false
-    }
-
+    // gamma-wine-engine's interactive_setup.py always mounts both Z:
+    // (host root) and G: (the resolved flat-install root) unconditionally
+    // — there is no drive-mapping mode choice for this pipeline.
     var plannedWineDriveMapping: String {
-        if driveMappingMode == "shorten", !optionalGDriveRoot.isEmpty {
-            return "G: -> \(optionalGDriveRoot)"
-        }
-        return "Z: -> /"
+        optionalGDriveRoot.isEmpty ? "Z: -> /" : "G: -> \(optionalGDriveRoot)"
     }
 
     var optionalGDriveRoot: String {
-        let selected = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !selected.isEmpty else { return "" }
-        return URL(fileURLWithPath: selected)
+        guard selectedLaunchExecutableFound else { return "" }
+        return URL(fileURLWithPath: selectedLaunchExecutablePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .standardizedFileURL.path
     }
 
     var driveMappingReady: Bool {
-        driveMappingMode != "shorten" || !optionalGDriveRoot.isEmpty
+        !optionalGDriveRoot.isEmpty
     }
-
-    var setupRequest: SetupRequest {
-        let modOrganizerPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let arguments = launchArguments.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return SetupRequest(
-            appName: appName.trimmingCharacters(in: .whitespacesAndNewlines),
-            outputApp: outputAppPath,
-            engine: engine,
-            renderer: renderer,
-            updateUSVFS: updateUSVFS,
-            installGPTK4Binaries: installGPTK4Binaries,
-            installDXMTBinaries: installDXMTBinaries,
-            installDirectXBinaries: installDirectXBinaries,
-            compatibilityProfile: compatibilityProfile,
-            mo2Path: modOrganizerPath,
-            programBatch: programBatch,
-            launchBatches: launchBatches,
-            launchArguments: arguments.isEmpty ? nil : arguments,
-            driveMappingMode: driveMappingMode,
-            forceRetinaOff: displayMode == "retinaOff",
-            writeLog: saveVerboseLog,
-            verbose: saveVerboseLog,
-            winetricks: winetricks,
-            additionalWinetricks: additionalWinetricks.isEmpty ? nil : additionalWinetricks
-        )
-    }
-
 }

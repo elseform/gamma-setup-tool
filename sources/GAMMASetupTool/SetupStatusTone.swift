@@ -1,9 +1,5 @@
 import Foundation
 
-enum WinetricksWrapperState {
-    case planned
-}
-
 enum SetupStatusTone: String {
     case success
     case warning
@@ -17,12 +13,5 @@ enum SetupStatusTone: String {
 
     static func statusRow(ok: Bool, warning: Bool) -> SetupStatusTone {
         checkRow(ok: ok, warning: warning)
-    }
-
-    static func winetricks(_ state: WinetricksWrapperState) -> SetupStatusTone {
-        switch state {
-        case .planned:
-            return .secondary
-        }
     }
 }

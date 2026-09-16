@@ -19,16 +19,7 @@ extension AppModel {
         if let gammaPath = settings.gammaPath?.trimmingCharacters(in: .whitespacesAndNewlines), !gammaPath.isEmpty {
             manualModOrganizerPath = URL(fileURLWithPath: gammaPath).appendingPathComponent("ModOrganizer.exe").path
         }
-        recommendedSettings = settings.recommended ?? AppSettingsStore.loadBundledRecommendedSettings()
-        useRecommendedD3DMetalPreset()
-    }
-
-    func saveSettings(gammaPath: String) {
-        do {
-            try AppSettingsStore.save(gammaPath: gammaPath, to: settingsURL)
-        } catch {
-            preflightError = "Could not save settings: \(error.localizedDescription)"
-        }
+        useDefaultLaunchConfiguration()
     }
 
     func showConfigFile() {
@@ -51,60 +42,28 @@ extension AppModel {
         }
     }
 
-    @discardableResult
-    func chooseModOrganizerFolder() -> Bool {
+    /// No `.tar.zst`/`.tar.xz` UTType exists to filter on, so this is an
+    /// unrestricted file picker (mirrors interactive_setup.py's own
+    /// unrestricted archive-path prompt).
+    func chooseWineEngineArchive() {
         let panel = NSOpenPanel()
-        panel.title = "Select ModOrganizer Folder"
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
+        panel.title = "Select gamma-wine-engine Archive"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
         panel.canCreateDirectories = false
         panel.allowsMultipleSelection = false
-        let currentPath = manualModOrganizerPath.isEmpty ? preflight?.mo2Path : manualModOrganizerPath
-        if let currentPath, !currentPath.isEmpty {
-            let url = URL(fileURLWithPath: currentPath)
-            panel.directoryURL = url.deletingLastPathComponent()
+        if !wineEngineArchivePath.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: wineEngineArchivePath).deletingLastPathComponent()
         }
-        guard panel.runModal() == .OK, let url = panel.url else { return false }
-        let detected = AppSettingsStore.detectedModOrganizerPath(in: url)
-        let modOrganizerPath = detected ?? url.appendingPathComponent("ModOrganizer.exe").path
-        manualModOrganizerPath = modOrganizerPath
-        if detected == nil {
-            modOrganizerSelectionError = "ModOrganizer.exe not found in selected folder."
-        } else {
-            modOrganizerSelectionError = ""
-            saveSettings(gammaPath: URL(fileURLWithPath: modOrganizerPath).deletingLastPathComponent().path)
+        if panel.runModal() == .OK, let url = panel.url {
+            wineEngineArchivePath = url.path
         }
-        if programBatch == "/mo2.bat" {
-            launchBatches.removeAll()
-        }
-        return detected != nil
-    }
-
-    func chooseGammaFolder() {
-        _ = chooseModOrganizerFolder()
     }
 
     func prepareNewWrapperFlow() {
         appName = "stalker-gamma"
         installDirectory = SetupConfiguration.defaultInstallDirectory
-        driveMappingMode = recommendedSettings.driveMappingMode
-        compatibilityProfile = .standard
         useDefaultLaunchConfiguration()
-        modOrganizerSelectionError = ""
-    }
-
-    func useRecommendedD3DMetalPreset() {
-        engine = recommendedSettings.engine
-        renderer = recommendedSettings.renderer
-        updateUSVFS = recommendedSettings.updateUSVFS
-        installGPTK4Binaries = recommendedSettings.installGPTK4Binaries
-        installDXMTBinaries = recommendedSettings.installDXMTBinaries
-        installDirectXBinaries = recommendedSettings.installDirectXBinaries
-        compatibilityProfile = recommendedSettings.compatibilityProfile
-        driveMappingMode = recommendedSettings.driveMappingMode
-        displayMode = recommendedSettings.displayMode
-        winetricks = recommendedSettings.winetricks
-        additionalWinetricks = recommendedSettings.additionalWinetricks
     }
 
     func chooseLaunchExecutable() {
@@ -117,14 +76,9 @@ extension AppModel {
         if let exeType = UTType(filenameExtension: "exe") {
             panel.allowedContentTypes = [exeType]
         }
-        if let preflight, !preflight.anomalyPath.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: preflight.anomalyPath)
-        } else if let preflight, !preflight.gammaPath.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: preflight.gammaPath)
-        }
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let detectedModOrganizerPath = manualModOrganizerPath.isEmpty ? preflight?.mo2Path : manualModOrganizerPath
-        if let detectedModOrganizerPath,
+        let detectedModOrganizerPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !detectedModOrganizerPath.isEmpty,
            URL(fileURLWithPath: detectedModOrganizerPath).standardizedFileURL == url.standardizedFileURL {
             useModOrganizerLaunch()
         } else {
@@ -134,7 +88,6 @@ extension AppModel {
 
     func useModOrganizerLaunch() {
         programBatch = "/mo2.bat"
-        installDirectXBinaries = false
         launchBatches.removeAll()
     }
 
@@ -146,10 +99,9 @@ extension AppModel {
     func setLaunchExecutable(_ executablePath: String) {
         let executable = URL(fileURLWithPath: executablePath)
         let batchPath = uniqueBatchPath(for: executable)
-        let detectedMO2 = manualModOrganizerPath.isEmpty ? preflight?.mo2Path : manualModOrganizerPath
-        let matchesDetectedMO2 = detectedMO2.map {
-            URL(fileURLWithPath: $0).standardizedFileURL == executable.standardizedFileURL
-        } ?? false
+        let detectedMO2 = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matchesDetectedMO2 = !detectedMO2.isEmpty
+            && URL(fileURLWithPath: detectedMO2).standardizedFileURL == executable.standardizedFileURL
         let usesMOEnv = matchesDetectedMO2
             || executable.lastPathComponent.caseInsensitiveCompare("ModOrganizer.exe") == .orderedSame
         let batch = LaunchBatch(
@@ -189,7 +141,7 @@ extension AppModel {
         return candidate
     }
 
-    func create() async -> Bool {
+    func createWineEngine() async -> Bool {
         isRunning = true
         frozenSetupSummaryItems = setupSummaryItems
         installStageIndex = 0
@@ -202,7 +154,7 @@ extension AppModel {
         statusText = "Creating"
         pendingEngineEventText = ""
         do {
-            let result = try await runEngine(command: "create", request: engineRequest(), stream: true)
+            let result = try await runEngine(command: "create-wine-engine", request: wineEngineRequest(), stream: true)
             isRunning = false
             progress = result.exitCode == 0 ? 1 : progress
             if result.exitCode == 0 {

@@ -16,10 +16,12 @@ public enum WineEngineSetupError: Error, CustomStringConvertible, LocalizedError
     public var errorDescription: String? { description }
 }
 
-/// Drives gamma-wine-engine's `interactive_setup.py` (vendored at
-/// Resources/wine-engine/) as a subprocess and forwards its own `--json`
-/// event stream through `reporter` verbatim — no text-banner-parsing
-/// translation layer needed, since the script speaks this schema natively.
+/// Drives `interactive_setup.py` (this repo's own, at
+/// sources/GAMMASetupTool/Resources/wine-engine/ — it builds the
+/// gamma-wine-engine archive it consumes, but the script itself lives here)
+/// as a subprocess and forwards its own `--json` event stream through
+/// `reporter` verbatim — no text-banner-parsing translation layer needed,
+/// since the script speaks this schema natively.
 public final class WineEngineSetup {
     private let fileManager = FileManager.default
     private let executablePath: String

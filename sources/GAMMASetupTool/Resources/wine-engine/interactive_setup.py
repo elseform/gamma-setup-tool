@@ -237,8 +237,13 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
         parts = member.name.split("/", 1)
         if len(parts) < 2 or not parts[1]:
             continue
+        # Skip macOS AppleDouble sidecar junk (._*) — a cross-volume copy
+        # anywhere upstream of packaging can leave these next to real files;
+        # extracting them would let the redist glob below pick them up too.
+        if Path(parts[1]).name.startswith("._"):
+            continue
         member.name = parts[1]
-        tf.extract(member, path=str(dest))
+        tf.extract(member, path=str(dest), filter="tar")
 
 
 def resolve_zstd() -> str:
@@ -268,6 +273,34 @@ def extract_archive(artifact_path: Path, engine_dir: Path) -> None:
     elif name.endswith(".tar.xz"):
         with tarfile.open(str(artifact_path), mode="r:xz") as tf:
             _extract_stripped(tf, engine_dir)
+    else:
+        raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.zst or .tar.xz)")
+
+
+def archive_has_d3dmetal_payload(artifact_path: Path) -> bool:
+    # Ground truth for whether offering the d3dmetal backend makes sense at
+    # all: some archives are built --dxmt-only (no lib64/apple_gptk payload)
+    # and picking d3dmetal against one hard-fails at runtime (cxcompatdb has
+    # nothing to load). Scanning member names is enough — no need to extract.
+    name = artifact_path.name
+    if name.endswith(".tar.zst"):
+        zstd_bin = resolve_zstd()
+        if not zstd_bin:
+            raise SetupError(f"zstd is required to inspect {artifact_path} (brew install zstd)")
+        proc = subprocess.Popen([zstd_bin, "-dc", str(artifact_path)], stdout=subprocess.PIPE)
+        try:
+            with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
+                for member in tf:
+                    if "/lib64/apple_gptk/" in member.name:
+                        return True
+            return False
+        finally:
+            if proc.stdout:
+                proc.stdout.close()
+            proc.wait()
+    elif name.endswith(".tar.xz"):
+        with tarfile.open(str(artifact_path), mode="r:xz") as tf:
+            return any("/lib64/apple_gptk/" in member.name for member in tf)
     else:
         raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.zst or .tar.xz)")
 
@@ -643,6 +676,13 @@ def run_setup(args: argparse.Namespace) -> None:
             raise SetupError(f"Not found: {artifact_path}")
         log(f"  Not found: {artifact_path}")
 
+    # Ground truth for the backend choice and paths.json's dxmtOnly, not
+    # args.dxmt_only: most archives are built dxmt-only (no lib64/apple_gptk
+    # payload at all — see pack-engine-artifact.sh's auto-detect), and
+    # offering/recording d3dmetal against one is wrong regardless of whether
+    # --dxmt-only was passed to this script.
+    dxmt_only = args.dxmt_only or not archive_has_d3dmetal_payload(artifact_path)
+
     app_name = prompt("Name for the .app bundle (without .app)", "GAMMA", args.app_name)
     if app_name.endswith(".app"):
         app_name = app_name[: -len(".app")]
@@ -677,7 +717,7 @@ def run_setup(args: argparse.Namespace) -> None:
     exe_rel_dir = str(Path(exe_rel_path).parent)
     exe_run_dir = gamma_root / exe_rel_dir
 
-    if args.dxmt_only:
+    if dxmt_only:
         graphics_backend = "dxmt"
     else:
         log("")
@@ -690,7 +730,7 @@ def run_setup(args: argparse.Namespace) -> None:
             log(f"  Unrecognized choice '{choice}', using dxmt")
             graphics_backend = "dxmt"
 
-    if args.dxmt_only:
+    if dxmt_only:
         runtime_mode = "redist"
     else:
         log("")
@@ -869,7 +909,10 @@ def run_setup(args: argparse.Namespace) -> None:
         # package (d3dcompiler_47/, directx_Jun2010_redist/, vcrun2022/,
         # ...), each holding an x86_64-windows/*.dll set confirmed required
         # against xray-monolith.
-        redist_dlls = sorted(redist_dir.glob("*/x86_64-windows/*.dll"))
+        redist_dlls = sorted(
+            p for p in redist_dir.glob("*/x86_64-windows/*.dll")
+            if not p.name.startswith("._")
+        )
         if not redist_dlls:
             raise SetupError("bundled redist payload is missing")
         sys64.mkdir(parents=True, exist_ok=True)
@@ -1015,7 +1058,7 @@ def run_setup(args: argparse.Namespace) -> None:
     (configurator_resources / "paths.json").write_text(json.dumps({
         "configFile": str(config_file),
         "stateFile": str(state_file),
-        "dxmtOnly": bool(args.dxmt_only),
+        "dxmtOnly": dxmt_only,
     }))
 
     for path in (launcher_path, winetricks_path, winecfg_path):

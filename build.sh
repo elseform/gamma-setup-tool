@@ -89,11 +89,11 @@ if [[ -d "$SOURCE_RESOURCES_DIR/gptk4" ]]; then
   rm -rf "$RESOURCES_DIR/gptk4"
   cp -R "$SOURCE_RESOURCES_DIR/gptk4" "$RESOURCES_DIR/gptk4"
 fi
-if [[ -d "$SOURCE_RESOURCES_DIR/wine-engine" ]]; then
-  rm -rf "$RESOURCES_DIR/wine-engine"
-  cp -R "$SOURCE_RESOURCES_DIR/wine-engine" "$RESOURCES_DIR/wine-engine"
-  chmod +x "$RESOURCES_DIR/wine-engine/interactive_setup.py"
-fi
+# interactive_setup.py lives here now (sources/GAMMASetupTool/Resources/
+# wine-engine/), not in gamma-wine-engine — no cross-repo sync needed.
+rm -rf "$RESOURCES_DIR/wine-engine"
+cp -R "$SOURCE_RESOURCES_DIR/wine-engine" "$RESOURCES_DIR/wine-engine"
+chmod +x "$RESOURCES_DIR/wine-engine/interactive_setup.py"
 cp "$SOURCE_RESOURCES_DIR/github.svg" "$RESOURCES_DIR/github.svg"
 cp "$SOURCE_RESOURCES_DIR/discord.svg" "$RESOURCES_DIR/discord.svg"
 if [[ -f "$SOURCE_RESOURCES_DIR/recommended-settings.json" ]]; then

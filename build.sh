@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-APP_VERSION="0.86"
+APP_VERSION="0.90"
 BUILD_DIR="$ROOT_DIR/dist"
 INTERMEDIATES_DIR="$BUILD_DIR/intermediates"
 APP_DIR="$BUILD_DIR/GAMMA Setup Tool.app"
@@ -85,10 +85,6 @@ if [[ -d "$SOURCE_RESOURCES_DIR/usvfs" ]]; then
   rm -rf "$RESOURCES_DIR/usvfs"
   cp -R "$SOURCE_RESOURCES_DIR/usvfs" "$RESOURCES_DIR/usvfs"
 fi
-if [[ -d "$SOURCE_RESOURCES_DIR/gptk4" ]]; then
-  rm -rf "$RESOURCES_DIR/gptk4"
-  cp -R "$SOURCE_RESOURCES_DIR/gptk4" "$RESOURCES_DIR/gptk4"
-fi
 # interactive_setup.py lives here now (sources/GAMMASetupTool/Resources/
 # wine-engine/), not in gamma-wine-engine — no cross-repo sync needed.
 rm -rf "$RESOURCES_DIR/wine-engine"
@@ -96,9 +92,6 @@ cp -R "$SOURCE_RESOURCES_DIR/wine-engine" "$RESOURCES_DIR/wine-engine"
 chmod +x "$RESOURCES_DIR/wine-engine/interactive_setup.py"
 cp "$SOURCE_RESOURCES_DIR/github.svg" "$RESOURCES_DIR/github.svg"
 cp "$SOURCE_RESOURCES_DIR/discord.svg" "$RESOURCES_DIR/discord.svg"
-if [[ -f "$SOURCE_RESOURCES_DIR/recommended-settings.json" ]]; then
-  cp "$SOURCE_RESOURCES_DIR/recommended-settings.json" "$RESOURCES_DIR/recommended-settings.json"
-fi
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

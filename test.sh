@@ -19,7 +19,7 @@ swiftc \
   "$ROOT_DIR/sources/GAMMASetupTool/SetupStatusTone.swift" \
   "$ROOT_DIR/tests/swift/AppSettingsStoreTests.swift" \
   "$ROOT_DIR/tests/swift/SetupConfigurationTests.swift" \
-  "$ROOT_DIR/tests/swift/SetupEngineCoreTests.swift" \
+  "$ROOT_DIR/tests/swift/SetupCoreUtilitiesTests.swift" \
   "$ROOT_DIR/tests/swift/SetupStatusToneTests.swift" \
   "$ROOT_DIR/tests/swift/main.swift" \
   -o "$SWIFT_TEST_BINARY"

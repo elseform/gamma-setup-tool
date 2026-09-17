@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.90 — unreleased
+
+### Main improvements
+
+- Replaced the Sikarugir wrapper pipeline with the `gamma-wine-engine` engine archive
+  (CrossOver 26.3 / Wine 11 with DXMT), driven through that project's
+  `interactive_setup.py`. The wizard no longer installs Homebrew casks or resolves
+  Winetricks itself; the engine archive carries the graphics backend and the Visual C++
+  and DirectX redistributables it needs.
+- The graphics backend is DXMT. D3DMetal is no longer bundled, and the renderer,
+  display-resolution, and drive-mapping options are gone with the pipeline that used
+  them — the engine mounts both `Z:` and `G:` on its own.
+- Setup progress is now reported directly from the engine script rather than parsed out
+  of its console output.
+
+### Removals
+
+- Removed the bundled GPTK4 D3DMetal payload, the bundled DirectX redistributable DLLs,
+  and `recommended-settings.json`. None of them had a consumer left after the pipeline
+  change.
+
+### Known limitation
+
+- The engine archive is selected from a local file. Downloading it from a published
+  `gamma-wine-engine` release is not wired up yet, because no such release exists.
+
 ## 0.86 — 2026-08-07
 
 ### Main improvements

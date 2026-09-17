@@ -49,7 +49,7 @@ struct WrapperNamePage: View {
             }
             .frame(maxWidth: Layout.environmentPanelWidth, alignment: .topLeading)
 
-            Text("Recommended settings work for most installations. You can change them later using the Configure application.")
+            Text("You'll review the wrapper settings on the next step. They can be changed later using the Configure application.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -57,7 +57,7 @@ struct WrapperNamePage: View {
             if model.wrapperNameIsValid
                 && model.selectedModOrganizerExecutableFound
                 && !model.driveMappingReady {
-                Label("Drive mapping is not valid. Review Advanced Settings to fix it.", systemImage: "exclamationmark.triangle.fill")
+                Label("Drive mapping is not valid. Fix it on the next step.", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.yellow)
             }

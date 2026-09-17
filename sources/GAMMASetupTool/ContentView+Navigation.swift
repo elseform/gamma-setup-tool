@@ -14,7 +14,7 @@ extension ContentView {
         case .setup:
             return (
                 "Wrapper settings",
-                "Recommended settings work for most installations. Change them only when needed."
+                "Review the engine archive and options, then continue."
             )
         case .create:
             return (model.createHeaderTitle, model.createHeaderSubtitle)
@@ -56,8 +56,7 @@ extension ContentView {
         case .create:
             CreatePage(
                 model: model,
-                createButtonSubmitted: $createButtonSubmitted,
-                minimalSummary: installMode == .defaultInstall
+                createButtonSubmitted: $createButtonSubmitted
             )
         case .complete:
             CompletePage(model: model)
@@ -69,7 +68,7 @@ extension ContentView {
     // MARK: - Footer
 
     private var footerVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.86"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.90"
     }
 
     var footer: some View {
@@ -150,21 +149,13 @@ extension ContentView {
         switch step {
         case .wrapperName:
             Button {
-                selectAdvancedInstall()
+                continueToNextStep()
             } label: {
-                Label("Review Advanced Settings", systemImage: "slider.horizontal.3")
-            }
-            .disabled(wrapperNameActionsDisabled)
-
-            Button {
-                selectRecommendedInstall()
-            } label: {
-                Label("Create with Recommended Settings", systemImage: "checkmark.circle")
+                Label("Continue", systemImage: "arrow.right.circle")
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
-            .disabled(recommendedActionDisabled)
-            .help("Use GPTK4 D3DMetal with source-verified X-Ray dependencies.")
+            .disabled(wrapperNameActionsDisabled)
         case .setup:
             Button {
                 continueToNextStep()
@@ -205,13 +196,7 @@ extension ContentView {
         if step == .complete {
             return []
         }
-        if installMode == .defaultInstall {
-            return [.wrapperName, .create]
-        }
-        if installMode == .advanced {
-            return [.wrapperName, .setup, .create]
-        }
-        return [.wrapperName]
+        return [.wrapperName, .setup, .create]
     }
 
     private var currentStepIndex: Int? {
@@ -246,10 +231,6 @@ extension ContentView {
         !model.wrapperNameIsValid || !model.selectedModOrganizerExecutableFound
     }
 
-    private var recommendedActionDisabled: Bool {
-        wrapperNameActionsDisabled || !model.driveMappingReady
-    }
-
     private func continueToNextStep() {
         guard let next = nextStep else { return }
         furthestUnlockedStep = next.rawValue > furthestUnlockedStep.rawValue ? next : furthestUnlockedStep
@@ -265,16 +246,5 @@ extension ContentView {
                 step = .complete
             }
         }
-    }
-
-    private func selectRecommendedInstall() {
-        guard model.selectedModOrganizerExecutableFound, model.driveMappingReady else { return }
-        installMode = .defaultInstall
-        step = .create
-    }
-
-    private func selectAdvancedInstall() {
-        installMode = .advanced
-        step = .setup
     }
 }

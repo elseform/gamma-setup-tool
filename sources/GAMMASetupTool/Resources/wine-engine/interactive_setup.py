@@ -42,6 +42,10 @@ REPO_ROOT = SCRIPT_DIR.parent
 
 JSON_MODE = False
 _CURRENT_STAGE = None
+# Populated by run_setup once app_path/app_support are known, so a failure
+# (SetupError or Ctrl+C) anywhere after that point can remove the partial
+# wrapper instead of leaving broken debris behind.
+_cleanup_paths: list = []
 
 
 class SetupError(RuntimeError):
@@ -243,7 +247,31 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
         if Path(parts[1]).name.startswith("._"):
             continue
         member.name = parts[1]
-        tf.extract(member, path=str(dest), filter="tar")
+        # filter= (PEP 706) only exists on Python 3.12+; resolvePython3()
+        # (WineEngineSetup.swift) prefers /usr/bin/python3, which on
+        # macOS is frequently older (3.9.x on releases without an updated
+        # Xcode CLT install) — calling extract() with filter= there raises
+        # TypeError instead of extracting anything.
+        if sys.version_info >= (3, 12):
+            tf.extract(member, path=str(dest), filter="tar")
+        else:
+            tf.extract(member, path=str(dest))
+
+
+def _drain_and_close(proc: subprocess.Popen) -> None:
+    # tarfile's streaming reader stops as soon as it sees the end-of-archive
+    # marker (or, in archive_has_d3dmetal_payload, as soon as it finds what
+    # it's looking for) without reading any trailing block padding zstd has
+    # already decompressed. Closing the pipe while zstd still has queued
+    # output makes its next write() raise SIGPIPE (returncode -13). Draining
+    # to real EOF first lets zstd finish and exit on its own.
+    if proc.stdout:
+        try:
+            while proc.stdout.read(1 << 20):
+                pass
+        except (BrokenPipeError, OSError):
+            pass
+        proc.stdout.close()
 
 
 def resolve_zstd() -> str:
@@ -265,8 +293,7 @@ def extract_archive(artifact_path: Path, engine_dir: Path) -> None:
             with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
                 _extract_stripped(tf, engine_dir)
         finally:
-            if proc.stdout:
-                proc.stdout.close()
+            _drain_and_close(proc)
             returncode = proc.wait()
             if returncode != 0:
                 raise SetupError(f"zstd exited with status {returncode}")
@@ -295,8 +322,7 @@ def archive_has_d3dmetal_payload(artifact_path: Path) -> bool:
                         return True
             return False
         finally:
-            if proc.stdout:
-                proc.stdout.close()
+            _drain_and_close(proc)
             proc.wait()
     elif name.endswith(".tar.xz"):
         with tarfile.open(str(artifact_path), mode="r:xz") as tf:
@@ -762,6 +788,12 @@ def run_setup(args: argparse.Namespace) -> None:
     config_file = app_support / "app.env"
     state_file = app_support / "configurator-state.json"
 
+    # Everything this script writes from here on lives under app_path or
+    # app_support (engine, prefix, launcher, Configurator.app copy) — both
+    # are guaranteed fresh (app_path's existence was already checked above),
+    # so on failure main()'s cleanup can safely remove them wholesale.
+    _cleanup_paths.extend([app_path, app_support])
+
     log("")
     log(f"  Engine archive: {artifact_path}")
     log(f"  App bundle:     {app_path}")
@@ -1143,6 +1175,16 @@ def run_setup(args: argparse.Namespace) -> None:
     stage_finished("finalize")
 
 
+def _cleanup_partial_wrapper() -> None:
+    for path in _cleanup_paths:
+        if path.exists():
+            try:
+                shutil.rmtree(path)
+                log(f"Removed partial output: {path}")
+            except OSError as exc:
+                err(f"warning: failed to remove {path}: {exc}")
+
+
 def main() -> None:
     global JSON_MODE
     parser = build_arg_parser()
@@ -1155,9 +1197,11 @@ def main() -> None:
             stage_failed(_CURRENT_STAGE, str(exc))
         completed(False, str(exc))
         err(f"error: {exc}")
+        _cleanup_partial_wrapper()
         sys.exit(1)
     except KeyboardInterrupt:
         completed(False, "Interrupted")
+        _cleanup_partial_wrapper()
         sys.exit(130)
     else:
         completed(True, "Setup complete.")

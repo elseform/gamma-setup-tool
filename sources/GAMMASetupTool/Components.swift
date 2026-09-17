@@ -147,11 +147,6 @@ struct WizardCard<Content: View>: View {
     }
 }
 
-enum SetupInstallMode {
-    case defaultInstall
-    case advanced
-}
-
 enum WizardStep: Int, CaseIterable, Identifiable {
     case welcome
     case wrapperName

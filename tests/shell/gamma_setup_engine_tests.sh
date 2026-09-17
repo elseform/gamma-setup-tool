@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+# CLI integration tests for gamma-setup-engine.
+#
+# The engine now exposes exactly one real command, `create-wine-engine`
+# (sources/GAMMASetupEngine/main.swift), which drives gamma-wine-engine's
+# interactive_setup.py. The former preflight / install-dependencies /
+# install-dependency / create commands went away with the Sikarugir pipeline,
+# so everything here exercises argument handling and the failure paths that
+# WineEngineSetup.create() reaches *before* it touches the filesystem.
 set -euo pipefail
 
 ROOT_DIR="${1:?root dir is required}"
@@ -21,211 +29,114 @@ assert_contains() {
   fi
 }
 
-assert_not_contains() {
-  local file="$1"
-  local unexpected="$2"
-  if grep -Fq -- "$unexpected" "$file"; then
-    printf 'Expected %s not to contain:\n%s\n\nActual:\n' "$file" "$unexpected" >&2
-    cat "$file" >&2
-    exit 1
+# Runs the engine, expecting a non-zero exit, and captures both streams.
+# Usage: expect_failure <label> <stdout-file> <stderr-file> -- <args...>
+expect_failure() {
+  local label="$1" out="$2" err="$3"
+  shift 4 # label, out, err, and the literal --
+  if "$ENGINE" "$@" >"$out" 2>"$err"; then
+    fail "$label: expected a non-zero exit"
   fi
 }
 
-assert_before() {
-  local file="$1"
-  local first="$2"
-  local second="$3"
-  local first_line
-  local second_line
-  first_line="$(grep -nF -- "$first" "$file" | head -n 1 | cut -d: -f1 || true)"
-  second_line="$(grep -nF -- "$second" "$file" | head -n 1 | cut -d: -f1 || true)"
-  if [ -z "$first_line" ] || [ -z "$second_line" ] || [ "$first_line" -ge "$second_line" ]; then
-    printf 'Expected %s to contain %s before %s\n\nActual:\n' "$file" "$first" "$second" >&2
-    cat "$file" >&2
-    exit 1
-  fi
-}
-
+# A request whose only interesting property is which field is missing.
+# appParent points somewhere that must stay untouched, so we can prove no
+# wrapper was created on the failure paths.
 write_request() {
   local file="$1"
-  local output_app="$2"
-  local settings_file="$3"
-  cat >"$file" <<JSON
-{
-  "anomalyPath" : "",
-  "appIconSource" : "",
-  "appName" : "stalker-gamma",
-  "driveMappingMode" : "preserve",
-  "dryRun" : false,
-  "engine" : "WS12WineCX24.0.7_7",
-  "forceDownload" : false,
-  "gammaPath" : "",
-  "installGPTK4Binaries" : false,
-  "installDXMTBinaries" : false,
-  "installDirectXBinaries" : false,
-  "mo2Path" : "",
-  "outputApp" : "$output_app",
-  "programBatch" : "/mo2.bat",
-  "renderer" : "d3dmetal",
-  "replace" : false,
-  "resourceRoot" : "$ROOT_DIR",
-  "settingsFile" : "$settings_file",
-  "updateUSVFS" : true,
-  "usvfsSource" : "",
-  "verbose" : false,
-  "writeLog" : false
-}
-JSON
-}
-
-write_create_request() {
-  local file="$1"
-  local output_app="$2"
+  local archive_path="$2"
   local mo2_path="$3"
   cat >"$file" <<JSON
 {
-  "anomalyPath" : "",
-  "appIconSource" : "",
+  "archivePath" : "$archive_path",
   "appName" : "stalker-gamma",
-  "driveMappingMode" : "preserve",
-  "dryRun" : true,
-  "engine" : "WS12WineCX24.0.7_7",
-  "forceDownload" : false,
-  "gammaPath" : "",
-  "installGPTK4Binaries" : false,
-  "installDXMTBinaries" : false,
-  "installDirectXBinaries" : false,
+  "appParent" : "$TMP_ROOT/apps",
+  "gammaRoot" : "$TMP_ROOT/stage/GAMMA",
   "mo2Path" : "$mo2_path",
-  "outputApp" : "$output_app",
-  "programBatch" : "/mo2.bat",
-  "renderer" : "d3dmetal",
-  "replace" : false,
-  "resourceRoot" : "$ROOT_DIR",
-  "settingsFile" : "$TMP_ROOT/missing-settings.json",
+  "backend" : "dxmt",
+  "runtimeMode" : "redist",
+  "dxmtOnly" : true,
+  "yes" : true,
+  "skipFinderAlias" : true,
+  "forceExe" : false,
   "updateUSVFS" : false,
-  "usvfsSource" : "",
-  "verbose" : false,
-  "writeLog" : false
+  "usvfsSource" : ""
 }
 JSON
 }
 
-make_fake_brew() {
-  local fake_bin="$1"
-  cat >"$fake_bin/brew" <<'BREW'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "${BREW_LOG:?BREW_LOG is required}"
-case "${1:-}" in
-  tap)
-    if [ "$#" -eq 1 ]; then
-      if [ -n "${BREW_TAPS:-}" ]; then
-        printf '%s\n' "$BREW_TAPS"
-      fi
-      exit 0
-    fi
-    exit 0
-    ;;
-  list)
-    if [ "${2:-}" = "--cask" ] && [ "${3:-}" = "sikarugir" ] && [ "${BREW_HAS_SIKARUGIR:-0}" = "1" ]; then
-      exit 0
-    fi
-    exit 1
-    ;;
-  install)
-    exit 0
-    ;;
-esac
-exit 0
-BREW
-  chmod +x "$fake_bin/brew"
-}
+printf '==> CLI help names the only supported command\n'
+"$ENGINE" --help >"$TMP_ROOT/help.out"
+assert_contains "$TMP_ROOT/help.out" "create-wine-engine"
+assert_contains "$TMP_ROOT/help.out" "--request-file"
+"$ENGINE" -h >/dev/null
 
-make_fake_curl() {
-  local fake_bin="$1"
-  cat >"$fake_bin/curl" <<'CURL'
-#!/usr/bin/env bash
-exit 0
-CURL
-  chmod +x "$fake_bin/curl"
-}
-
-printf '==> CLI detects missing tools\n'
-missing_dir="$TMP_ROOT/missing-tools"
-mkdir -p "$missing_dir"
-request="$TMP_ROOT/missing-tools-request.json"
-write_request "$request" "$TMP_ROOT/missing-tools.app" "$TMP_ROOT/missing-settings.json"
-GAMMA_SETUP_TOOL_PATHS="$missing_dir" "$ENGINE" preflight --request-file "$request" >"$TMP_ROOT/missing-tools.json"
-assert_contains "$TMP_ROOT/missing-tools.json" '"homebrewFound" : false'
-assert_contains "$TMP_ROOT/missing-tools.json" '"sikarugirInstalled" : false'
-assert_contains "$TMP_ROOT/missing-tools.json" '"winetricksFound" : false'
-
-printf '==> CLI fails dependency install clearly when Homebrew is missing\n'
-if GAMMA_SETUP_TOOL_PATHS="$missing_dir" "$ENGINE" install-dependencies --request-file "$request" >"$TMP_ROOT/no-brew.out" 2>"$TMP_ROOT/no-brew.err"; then
-  fail "install-dependencies unexpectedly succeeded without Homebrew"
+printf '==> CLI with no arguments prints usage and exits 2\n'
+set +e
+"$ENGINE" >"$TMP_ROOT/noargs.out" 2>"$TMP_ROOT/noargs.err"
+noargs_status=$?
+set -e
+if [ "$noargs_status" -ne 2 ]; then
+  fail "expected exit 2 with no arguments, got $noargs_status"
 fi
-assert_contains "$TMP_ROOT/no-brew.err" "Homebrew is required to install Sikarugir"
+assert_contains "$TMP_ROOT/noargs.err" "Usage:"
 
-printf '==> CLI treats winetricks as a wrapper-time dependency\n'
-GAMMA_SETUP_TOOL_PATHS="$missing_dir" "$ENGINE" install-dependency --name winetricks --request-file "$request" >"$TMP_ROOT/winetricks-dependency.out"
-assert_contains "$TMP_ROOT/winetricks-dependency.out" "winetricks is resolved during wrapper setup."
+printf '==> CLI rejects an unknown command and still emits a completed event\n'
+expect_failure "unknown command" "$TMP_ROOT/bogus.out" "$TMP_ROOT/bogus.err" -- bogus
+assert_contains "$TMP_ROOT/bogus.err" "error: unknown command: bogus"
+# The GUI reads the NDJSON stream, not the exit code, so a failure has to be
+# visible there too.
+assert_contains "$TMP_ROOT/bogus.out" '"success":false'
+assert_contains "$TMP_ROOT/bogus.out" '"type":"completed"'
 
-printf '==> CLI installs missing Sikarugir dependencies with fake brew\n'
-fake_bin="$TMP_ROOT/fake-bin"
-mkdir -p "$fake_bin"
-make_fake_brew "$fake_bin"
-brew_log="$TMP_ROOT/brew.log"
-BREW_LOG="$brew_log" BREW_TAPS="" BREW_HAS_SIKARUGIR=0 GAMMA_SETUP_TOOL_PATHS="$fake_bin" \
-  "$ENGINE" install-dependencies --request-file "$request" >"$TMP_ROOT/install.out"
-assert_contains "$brew_log" "tap"
-assert_contains "$brew_log" "tap sikarugir-app/sikarugir"
-assert_contains "$brew_log" "install --cask sikarugir"
-assert_not_contains "$brew_log" "install winetricks"
-assert_contains "$TMP_ROOT/install.out" '"success":true'
+printf '==> CLI requires --request-file\n'
+expect_failure "missing --request-file" "$TMP_ROOT/norequest.out" "$TMP_ROOT/norequest.err" \
+  -- create-wine-engine
+assert_contains "$TMP_ROOT/norequest.err" "--request-file is required"
 
-printf '==> CLI emits dependency stage before wrapper creation\n'
-make_fake_curl "$fake_bin"
-stage_gamma="$TMP_ROOT/stage/GAMMA"
-mkdir -p "$stage_gamma"
-touch "$stage_gamma/ModOrganizer.exe"
-cat >"$stage_gamma/ModOrganizer.ini" <<'INI'
-[General]
-gamePath=G:/Anomaly
-INI
-stage_request="$TMP_ROOT/stage-request.json"
-write_create_request "$stage_request" "$TMP_ROOT/stage.app" "$stage_gamma/ModOrganizer.exe"
-if BREW_LOG="$brew_log" BREW_TAPS="" BREW_HAS_SIKARUGIR=0 GAMMA_SETUP_TOOL_PATHS="$fake_bin" \
-  "$ENGINE" create --request-file "$stage_request" >"$TMP_ROOT/stage.out" 2>"$TMP_ROOT/stage.err"; then
-  :
-else
-  assert_contains "$TMP_ROOT/stage.err" "missing Sikarugir Configure.app"
-fi
-assert_contains "$TMP_ROOT/stage.out" '"stage":"dependencies"'
-assert_contains "$TMP_ROOT/stage.out" '"stage":"wrapper"'
-assert_before "$TMP_ROOT/stage.out" '"stage":"dependencies"' '"stage":"wrapper"'
+printf '==> CLI rejects a missing and a malformed request file\n'
+expect_failure "missing request file" "$TMP_ROOT/absent.out" "$TMP_ROOT/absent.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/does-not-exist.json"
+assert_contains "$TMP_ROOT/absent.err" "error:"
 
-printf '==> CLI detects installed fake tools\n'
-cat >"$fake_bin/winetricks" <<'WINETRICKS'
-#!/usr/bin/env bash
-exit 0
-WINETRICKS
-chmod +x "$fake_bin/winetricks"
-BREW_LOG="$brew_log" BREW_TAPS="sikarugir-app/sikarugir" BREW_HAS_SIKARUGIR=1 GAMMA_SETUP_TOOL_PATHS="$fake_bin" \
-  "$ENGINE" preflight --request-file "$request" >"$TMP_ROOT/fake-tools.json"
-assert_contains "$TMP_ROOT/fake-tools.json" '"homebrewFound" : true'
-assert_contains "$TMP_ROOT/fake-tools.json" '"sikarugirInstalled" : true'
-assert_contains "$TMP_ROOT/fake-tools.json" '"winetricksFound" : true'
-
-printf '==> CLI rejects malformed requests and unknown dependency names\n'
 printf '{bad json}\n' >"$TMP_ROOT/bad-request.json"
-if "$ENGINE" preflight --request-file "$TMP_ROOT/bad-request.json" >"$TMP_ROOT/bad.out" 2>"$TMP_ROOT/bad.err"; then
-  fail "preflight unexpectedly accepted malformed JSON"
-fi
+expect_failure "malformed request file" "$TMP_ROOT/bad.out" "$TMP_ROOT/bad.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/bad-request.json"
 assert_contains "$TMP_ROOT/bad.err" "error:"
 
-if BREW_LOG="$brew_log" BREW_TAPS="sikarugir-app/sikarugir" BREW_HAS_SIKARUGIR=1 GAMMA_SETUP_TOOL_PATHS="$fake_bin" \
-  "$ENGINE" install-dependency --name bogus --request-file "$request" >"$TMP_ROOT/bogus.out" 2>"$TMP_ROOT/bogus.err"; then
-  fail "install-dependency unexpectedly accepted an unknown dependency"
+printf '==> CLI requires an engine archive source\n'
+write_request "$TMP_ROOT/no-archive.json" "" ""
+expect_failure "no archive source" "$TMP_ROOT/no-archive.out" "$TMP_ROOT/no-archive.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/no-archive.json"
+assert_contains "$TMP_ROOT/no-archive.err" "one of the two is required"
+
+printf '==> CLI rejects an archivePath that does not exist\n'
+write_request "$TMP_ROOT/ghost-archive.json" "$TMP_ROOT/ghost.tar.zst" ""
+expect_failure "ghost archive" "$TMP_ROOT/ghost.out" "$TMP_ROOT/ghost.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/ghost-archive.json"
+assert_contains "$TMP_ROOT/ghost.err" "engine archive not found:"
+
+printf '==> Archive resolution runs before launch-target resolution\n'
+# A present-but-empty archive gets past resolveArchive, so the next failure
+# proves the ordering inside WineEngineSetup.create() without ever reaching
+# interactive_setup.py.
+: >"$TMP_ROOT/present.tar.zst"
+write_request "$TMP_ROOT/no-mo2.json" "$TMP_ROOT/present.tar.zst" ""
+expect_failure "no launch target" "$TMP_ROOT/no-mo2.out" "$TMP_ROOT/no-mo2.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/no-mo2.json"
+assert_contains "$TMP_ROOT/no-mo2.err" "mo2Path is required when exeRelPath is not explicitly overridden"
+
+printf '==> CLI rejects an mo2Path outside gammaRoot\n'
+mkdir -p "$TMP_ROOT/elsewhere"
+touch "$TMP_ROOT/elsewhere/ModOrganizer.exe"
+write_request "$TMP_ROOT/outside.json" "$TMP_ROOT/present.tar.zst" "$TMP_ROOT/elsewhere/ModOrganizer.exe"
+expect_failure "mo2 outside gammaRoot" "$TMP_ROOT/outside.out" "$TMP_ROOT/outside.err" \
+  -- create-wine-engine --request-file "$TMP_ROOT/outside.json"
+assert_contains "$TMP_ROOT/outside.err" "is not inside gammaRoot"
+
+printf '==> No wrapper was created on any failure path\n'
+if [ -e "$TMP_ROOT/apps" ]; then
+  fail "appParent was created despite every run failing"
 fi
-assert_contains "$TMP_ROOT/bogus.err" "unknown install dependency: bogus"
 
 printf 'All CLI integration tests passed.\n'

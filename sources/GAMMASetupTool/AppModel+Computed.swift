@@ -148,10 +148,6 @@ extension AppModel {
         return makeSetupSummaryItems()
     }
 
-    var minimalSetupSummaryItems: [SetupSummaryItem] {
-        makeSetupSummaryItems()
-    }
-
     func makeSetupSummaryItems() -> [SetupSummaryItem] {
         var rows: [SetupSummaryItem] = []
 

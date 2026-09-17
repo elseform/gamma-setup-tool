@@ -1,6 +1,6 @@
 # GAMMA Setup Tool
 
-Native macOS tool for creating a Sikarugir `.app` wrapper around an existing S.T.A.L.K.E.R. G.A.M.M.A. installation.
+Native macOS tool for creating a Wine `.app` wrapper, built on [gamma-wine-engine](https://github.com/elseform/gamma-wine-engine), around an existing S.T.A.L.K.E.R. G.A.M.M.A. installation.
 
 GAMMA Setup Tool does not install G.A.M.M.A. itself. It requires an existing G.A.M.M.A. installation.
 
@@ -8,9 +8,9 @@ See [CHANGELOG.md](CHANGELOG.md) for release highlights and notable behavior cha
 
 ## Description
 
-Choose an app name, select the GAMMA folder that contains `ModOrganizer.exe`, and use the recommended settings or review the advanced options. The tool then creates a Sikarugir `.app` wrapper in `~/Applications`.
+Choose an app name, select the GAMMA folder that contains `ModOrganizer.exe`, then pick a gamma-wine-engine archive and review the wrapper settings. The tool then creates the `.app` wrapper in `~/Applications`.
 
-The recommended settings work for most installations. Advanced settings let you change the Wine engine, renderer, display behavior, drive mapping, or launch executable.
+The engine is DXMT-only — there's no Wine engine, renderer, or display-behavior choice. Drive mapping always mounts the game root as `G:` and the host root as `Z:`. Runtime dependencies always install from the bundled redistributables (no winetricks verb selection).
 
 The tool checks that `ModOrganizer.exe` exists, but it does not validate the contents or health of the GAMMA installation.
 
@@ -23,8 +23,8 @@ The app uses the selected `ModOrganizer.exe` path to create a native macOS app w
 The guided flow handles:
 
 - GAMMA and ModOrganizer folder selection.
-- Required winetricks dependencies.
-- Recommended defaults and advanced Wine, renderer, display, and launch options.
+- gamma-wine-engine archive selection and drive-mapping review.
+- Bundled runtime dependencies and automatic USVFS updates.
 
 ## How to Use
 
@@ -37,12 +37,6 @@ GAMMA Setup Tool.app
 ```
 
 Because the release is not notarized, macOS may require you to approve the app in System Settings.
-
-### Wine Display
-
-`Default` leaves Wine display behavior unchanged. `Force Retina off` runs the wrapper as a normal non-Retina Windows display at 96 DPI.
-
-No resolution selector or display detection is used.
 
 ## Developer Notes
 
@@ -95,7 +89,7 @@ The Swift package builds both the GUI and the `gamma-setup-engine` backend.
 
 ### Logs
 
-Setup logs are optional. Enable `Save detailed setup log` in the advanced settings to create a log in `~/`:
+Setup logs are optional. Enable `Save detailed setup log` in the wrapper settings to create a log in `~/`:
 
 ```text
 gamma-setup-tool.YYYYMMDD-HHMMSS.log

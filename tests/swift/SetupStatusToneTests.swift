@@ -12,8 +12,4 @@ final class SetupStatusToneTests {
         XCTAssertEqual(SetupStatusTone.statusRow(ok: false, warning: true), .warning)
         XCTAssertEqual(SetupStatusTone.statusRow(ok: false, warning: false), .error)
     }
-
-    func testWinetricksTonesMatchWrapperState() {
-        XCTAssertEqual(SetupStatusTone.winetricks(.planned), .secondary)
-    }
 }

@@ -40,6 +40,28 @@ public final class WineEngineSetup {
         URL(fileURLWithPath: NSString(string: "~/Library/Application Support/gamma-setup-tool").expandingTildeInPath)
     }
 
+    // Dev-mode fallback: walk up from the running executable looking for
+    // the checkout root (marked by Package.swift), instead of guessing a
+    // fixed number of `..` hops. The Swift toolchain's build layout isn't
+    // stable across versions — the classic native build system places the
+    // executable at .build/debug/ (2 hops to the repo root), but the newer
+    // one (default on Swift 6.4/swiftlang-6.4.0.34.1, per `swift build`'s
+    // "[Pre-planning ...]" output here) nests it under
+    // .build/out/Products/Debug/ (4 hops) — a fixed hop count silently
+    // breaks under one or the other.
+    private var devRepoRoot: URL? {
+        var dir = scriptRoot
+        for _ in 0..<8 {
+            if fileManager.fileExists(atPath: dir.appendingPathComponent("Package.swift").path) {
+                return dir
+            }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { return nil }
+            dir = parent
+        }
+        return nil
+    }
+
     public func create(request: WineEngineSetupRequest) throws {
         let scriptURL = try locateScript()
         let cacheDir = appSupportDirectory.appendingPathComponent("cache/gamma-wine-engine")
@@ -108,11 +130,14 @@ public final class WineEngineSetup {
         if !override.isEmpty {
             return URL(fileURLWithPath: override)
         }
-        let candidates = [
+        var candidates = [
             scriptRoot.appendingPathComponent("usvfs"),
             scriptRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/usvfs"),
             scriptRoot.appendingPathComponent("../../sources/GAMMASetupTool/Resources/usvfs"),
         ]
+        if let devRepoRoot {
+            candidates.append(devRepoRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/usvfs"))
+        }
         for candidate in candidates where fileManager.fileExists(atPath: candidate.appendingPathComponent("usvfs_x64.dll").path) {
             return candidate
         }
@@ -122,11 +147,14 @@ public final class WineEngineSetup {
     // MARK: - Resource/archive resolution
 
     private func locateScript() throws -> URL {
-        let candidates = [
+        var candidates = [
             scriptRoot.appendingPathComponent("wine-engine/interactive_setup.py"),
             scriptRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"),
             scriptRoot.appendingPathComponent("../../sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"),
         ]
+        if let devRepoRoot {
+            candidates.append(devRepoRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"))
+        }
         for candidate in candidates where fileManager.fileExists(atPath: candidate.path) {
             return candidate
         }

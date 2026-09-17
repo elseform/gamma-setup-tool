@@ -19,7 +19,36 @@ extension AppModel {
         if let gammaPath = settings.gammaPath?.trimmingCharacters(in: .whitespacesAndNewlines), !gammaPath.isEmpty {
             manualModOrganizerPath = URL(fileURLWithPath: gammaPath).appendingPathComponent("ModOrganizer.exe").path
         }
+        if wineEngineArchivePath.isEmpty, let detected = Self.autoDetectedWineEngineArchive() {
+            wineEngineArchivePath = detected
+        }
         useDefaultLaunchConfiguration()
+    }
+
+    /// gamma-wine-engine has no published release yet (see
+    /// ContentView+Setup.swift's engineArchiveControls comment /
+    /// gamma-wine-engine/scripts/publish-release.sh), so during local
+    /// testing prefill the newest archive built in the sibling checkout
+    /// instead of requiring "Choose…" every run. Remove once that repo
+    /// ships real releases and the archive picker becomes a real download.
+    static func autoDetectedWineEngineArchive() -> String? {
+        let artifactsDir = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("projects/2_2_gamma/gamma-wine-engine/dist/artifacts")
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: artifactsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        let candidates = entries.filter {
+            $0.lastPathComponent.hasSuffix(".tar.zst") || $0.lastPathComponent.hasSuffix(".tar.xz")
+        }
+
+        return candidates.max { lhs, rhs in
+            let lhsDate = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let rhsDate = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            return lhsDate < rhsDate
+        }?.path
     }
 
     func showConfigFile() {

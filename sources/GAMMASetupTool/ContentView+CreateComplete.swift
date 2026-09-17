@@ -4,7 +4,6 @@ import AppKit
 struct CreatePage: View {
     @ObservedObject var model: AppModel
     @Binding var createButtonSubmitted: Bool
-    var minimalSummary = false
 
     // MARK: - Body
 
@@ -13,7 +12,7 @@ struct CreatePage: View {
             if model.isRunning || createButtonSubmitted || model.installFailed {
                 runStatus
             } else {
-                setupReviewCard(items: minimalSummary ? model.minimalSetupSummaryItems : model.setupSummaryItems)
+                setupReviewCard(items: model.setupSummaryItems)
             }
         }
         .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)

@@ -4,7 +4,6 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject var model = AppModel()
     @State var step: WizardStep = .wrapperName
-    @State var installMode: SetupInstallMode?
     @State var furthestUnlockedStep = WizardStep.setup
     @State var showWinetricksList = false
     @State var createButtonSubmitted = false

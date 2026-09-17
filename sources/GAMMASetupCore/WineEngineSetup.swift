@@ -80,6 +80,15 @@ public final class WineEngineSetup {
             "--backend", request.backend,
             "--runtime-mode", request.runtimeMode,
         ]
+        // The engine archive carries both the manifest and the fetcher, so
+        // the only thing this side decides is where installers are cached and
+        // whether the user already has copies of their own.
+        arguments += ["--redist-cache-dir", RedistInstallers.cacheDirectory.path]
+        let installerDirectory = (request.redistInstallerDirectory ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !installerDirectory.isEmpty {
+            arguments += ["--redist-installer-dir", (installerDirectory as NSString).expandingTildeInPath]
+        }
         if request.yes { arguments.append("--yes") }
         if request.dxmtOnly { arguments.append("--dxmt-only") }
         if request.skipFinderAlias { arguments.append("--skip-finder-alias") }

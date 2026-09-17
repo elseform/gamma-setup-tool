@@ -94,6 +94,13 @@ run("testAppSettingsLoadIgnoresMissingAndMalformedFiles", appSettings.testAppSet
 run("testEnsureSettingsFileExistsCreatesDefaultJson", appSettings.testEnsureSettingsFileExistsCreatesDefaultJson)
 run("testEnsureSettingsFileExistsDoesNotOverwriteAnExistingFile", appSettings.testEnsureSettingsFileExistsDoesNotOverwriteAnExistingFile)
 
+let redist = RedistInstallerTests()
+run("testRequestWithoutARedistDirectoryStillDecodes", redist.testRequestWithoutARedistDirectoryStillDecodes)
+run("testRequestRoundTripsASuppliedRedistDirectory", redist.testRequestRoundTripsASuppliedRedistDirectory)
+run("testEveryPinnedInstallerIsReportedOnce", redist.testEveryPinnedInstallerIsReportedOnce)
+run("testCachedInstallersAreReportedAsPresent", redist.testCachedInstallersAreReportedAsPresent)
+run("testASuppliedDirectoryWinsOverTheCache", redist.testASuppliedDirectoryWinsOverTheCache)
+
 let tones = SetupStatusToneTests()
 run("testCheckRowTonesMatchEnvironmentColoringRules", tones.testCheckRowTonesMatchEnvironmentColoringRules)
 run("testStatusRowTonesMatchCheckRows", tones.testStatusRowTonesMatchCheckRows)

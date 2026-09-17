@@ -64,6 +64,9 @@ final class AppModel: ObservableObject {
     // "redist" in wineEngineRequest() (AppModel+Engine.swift) — no fields
     // here for either, there's no choice to expose.
     @Published var wineEngineArchivePath = ""
+    /// Optional directory of already-downloaded Microsoft installers; empty
+    /// means the setup run uses its cache, then the network.
+    @Published var redistInstallerDirectory = ""
 
     init() {
         loadSettings()

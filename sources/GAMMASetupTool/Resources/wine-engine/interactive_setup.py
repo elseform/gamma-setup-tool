@@ -26,6 +26,7 @@ programmatic driving; --json requires every input to be supplied via flags
 (including --yes), since it never blocks on stdin.
 """
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -242,8 +243,8 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
         if len(parts) < 2 or not parts[1]:
             continue
         # Skip macOS AppleDouble sidecar junk (._*) — a cross-volume copy
-        # anywhere upstream of packaging can leave these next to real files;
-        # extracting them would let the redist glob below pick them up too.
+        # anywhere upstream of packaging can leave these next to real files,
+        # and nothing downstream should ever see them as real engine content.
         if Path(parts[1]).name.startswith("._"):
             continue
         member.name = parts[1]
@@ -626,6 +627,54 @@ exec arch -x86_64 "$ENGINE_DIR/bin/wine" \\
 """
 
 
+DEFAULT_REDIST_CACHE = (
+    Path.home() / "Library/Application Support/gamma-setup-tool/cache/redist-installers"
+)
+
+
+def load_redist_fetcher(engine_dir: Path):
+    """Import the redist fetcher the engine archive carries.
+
+    The engine declares which Microsoft DLLs it needs in its own
+    share/gamma/redist-manifest.json and ships the code that obtains them, so
+    this script needs no knowledge of Microsoft's installers — and no copy of
+    their DLLs, which are not ours to redistribute.
+    """
+    manifest_candidates = [
+        engine_dir / "share/gamma/redist-manifest.json",
+        REPO_ROOT / "config/redist-manifest.json",
+    ]
+    module_candidates = [
+        engine_dir / "share/gamma/redist-fetch/gamma_redist.py",
+        REPO_ROOT / "runtime/redist-fetch/gamma_redist.py",
+    ]
+    manifest_path = next((p for p in manifest_candidates if p.is_file()), None)
+    module_path = next((p for p in module_candidates if p.is_file()), None)
+    if manifest_path is None or module_path is None:
+        raise SetupError(
+            "this engine archive predates the redist manifest: it has no "
+            "share/gamma/redist-manifest.json and share/gamma/redist-fetch/. "
+            "Use a newer engine build, or select the 'verbs' runtime mode."
+        )
+
+    spec = importlib.util.spec_from_file_location("gamma_redist", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module, module.load_manifest(manifest_path)
+
+
+def install_redistributables(engine_dir: Path, system32: Path, args) -> list:
+    """Obtain every declared redistributable; return the stems to override."""
+    module, manifest = load_redist_fetcher(engine_dir)
+    cache_dir = Path(args.redist_cache_dir).expanduser() if args.redist_cache_dir \
+        else DEFAULT_REDIST_CACHE
+    search_dirs = [Path(d).expanduser() for d in (args.redist_installer_dir or [])]
+    try:
+        return module.install(manifest, system32, cache_dir, search_dirs, log)
+    except module.RedistError as error:
+        raise SetupError(str(error)) from error
+
+
 def render_template(template: str, **tokens: str) -> str:
     rendered = template
     for key, value in tokens.items():
@@ -658,6 +707,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--exe-rel-path", help="Path to the .exe, relative to game root.")
     parser.add_argument("--backend", choices=["dxmt", "d3dmetal"], help="Graphics backend.")
     parser.add_argument("--runtime-mode", choices=["redist", "verbs"], help="Runtime dependency source.")
+    parser.add_argument("--redist-cache-dir",
+                         help=f"Where to cache the redistributable installers (default: {DEFAULT_REDIST_CACHE}).")
+    parser.add_argument("--redist-installer-dir", action="append", metavar="DIR",
+                         help="Directory holding already-downloaded redistributable installers. "
+                              "Wins over both the cache and the network; repeatable.")
     return parser
 
 
@@ -761,7 +815,7 @@ def run_setup(args: argparse.Namespace) -> None:
     else:
         log("")
         log("Runtime dependencies:")
-        log("  1) redist  Copy bundled DLLs and register fallback overrides (default)")
+        log("  1) redist  Fetch the declared DLLs from Microsoft's pinned installers and register fallback overrides (default)")
         log("  2) verbs   Install required components with winetricks")
         choice = prompt("Select dependency source", "1", args.runtime_mode)
         runtime_mode = {
@@ -930,28 +984,12 @@ def run_setup(args: argparse.Namespace) -> None:
                 "Use redist fallback only if you explicitly want the fallback policy."
             )
     else:
-        stage_started("winetricks", "Step 2.4: Installing bundled DirectX/VC++ redistributables...")
-        redist_dir = engine_dir / "share/gamma/redist"
-        if not redist_dir.is_dir():
-            redist_dir = engine_dir / "redist"
-        if not redist_dir.is_dir():
-            redist_dir = REPO_ROOT / "runtime/redist"
+        stage_started("winetricks", "Step 2.4: Installing DirectX/VC++ redistributables...")
+        # 64-bit only: every file the engine's manifest declares is an
+        # x86_64-windows DLL, each confirmed required against xray-monolith.
         sys64 = wineprefix / "drive_c/windows/system32"
-        # 64-bit only: the redist payload is grouped one subdirectory per
-        # package (d3dcompiler_47/, directx_Jun2010_redist/, vcrun2022/,
-        # ...), each holding an x86_64-windows/*.dll set confirmed required
-        # against xray-monolith.
-        redist_dlls = sorted(
-            p for p in redist_dir.glob("*/x86_64-windows/*.dll")
-            if not p.name.startswith("._")
-        )
-        if not redist_dlls:
-            raise SetupError("bundled redist payload is missing")
-        sys64.mkdir(parents=True, exist_ok=True)
-        for dll in redist_dlls:
-            shutil.copy2(dll, sys64 / dll.name)
-        for dll in redist_dlls:
-            queue_reg(r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", f"*{dll.stem}", "REG_SZ", "native,builtin")
+        for stem in install_redistributables(engine_dir, sys64, args):
+            queue_reg(r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", f"*{stem}", "REG_SZ", "native,builtin")
         # Not `winecfg.exe -v win10`: winecfg has no headless "set and
         # exit" mode — it always opens its GUI window and blocks
         # indefinitely waiting for someone to close it, hanging any

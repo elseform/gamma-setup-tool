@@ -89,6 +89,24 @@ extension AppModel {
         }
     }
 
+    /// The redistributables themselves are never picked by hand — this only
+    /// points the fetcher at installers the user already downloaded, so it
+    /// can skip the network.
+    func chooseRedistInstallerDirectory() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Folder With Downloaded Installers"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+        if !redistInstallerDirectory.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: redistInstallerDirectory)
+        }
+        if panel.runModal() == .OK, let url = panel.url {
+            redistInstallerDirectory = url.path
+        }
+    }
+
     func prepareNewWrapperFlow() {
         appName = "stalker-gamma"
         installDirectory = SetupConfiguration.defaultInstallDirectory

@@ -10,3 +10,4 @@ ANNOUNCEMENT_0.86.md
 AGENTS.md
 .python-version
 *.orphan
+__pycache__/

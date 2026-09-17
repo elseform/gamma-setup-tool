@@ -8,6 +8,9 @@ struct SetupPage: View {
     @ObservedObject var model: AppModel
     @Binding var showWinetricksList: Bool
 
+    @State private var showRedistInstallers = false
+    @State private var redistInstallerStatuses: [RedistInstallers.Status] = []
+
     // MARK: - Body
 
     var body: some View {
@@ -48,6 +51,8 @@ struct SetupPage: View {
             VStack(alignment: .leading, spacing: Layout.cardContentSpacing) {
                 engineArchiveControls
                 Divider()
+                redistInstallerControls
+                Divider()
                 driveMappingControls
             }
         }
@@ -73,6 +78,60 @@ struct SetupPage: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+        }
+    }
+
+    // MARK: - Redistributables
+
+    // The DirectX/VC++ DLLs are not shipped with the engine — it declares
+    // which ones it needs and fetches them from Microsoft's own pinned
+    // installers during setup. Nothing here has to be filled in; the picker
+    // only lets someone who already has the installers point at them so the
+    // run stays offline. Collapsed by default, since the default path needs
+    // no decision.
+    private var redistInstallerControls: some View {
+        DisclosureGroup(isExpanded: $showRedistInstallers) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(redistInstallerStatuses, id: \.installer.filename) { status in
+                    Label {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(status.installer.title)
+                                .font(.callout)
+                            Text(status.isPresent
+                                 ? "Already downloaded"
+                                 : "Will be downloaded (\(status.installer.sizeLabel))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: status.isPresent ? "checkmark.circle.fill" : "arrow.down.circle")
+                            .foregroundStyle(status.isPresent ? .green : .secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+
+                HStack(spacing: 8) {
+                    TextField("Optional folder with downloaded installers",
+                              text: $model.redistInstallerDirectory)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Choose…") {
+                        model.chooseRedistInstallerDirectory()
+                    }
+                }
+
+                Text("Each file is verified against the checksum the engine pins, wherever it came from.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 6)
+        } label: {
+            CardHeading(title: "Microsoft redistributables")
+        }
+        .task(id: model.redistInstallerDirectory) {
+            redistInstallerStatuses = RedistInstallers.statuses(
+                userDirectory: model.redistInstallerDirectory
+            )
         }
     }
 
@@ -105,7 +164,7 @@ struct SetupPage: View {
     // MARK: - Additional Options
 
     // No runtime-dependency-mode or dxmt-only controls: redist is always
-    // used (simpler, no network access needed — see wineEngineRequest()),
+    // used (see wineEngineRequest()),
     // and USVFS updates always run with an automatic up-to-date check
     // instead of a manual toggle (WineEngineSetup.updateUSVFSIfNeeded).
     private var additionalOptionsCard: some View {

@@ -17,10 +17,10 @@ extension AppModel {
     /// payload at all (`lib64/apple_gptk` is empty) — selecting it would
     /// hard-fail interactive_setup.py's own backend-presence check.
     /// Revisit once a build with both backends is the one in use. No
-    /// runtime-mode or dxmt-only choice either: redist is simply better (no
-    /// network access needed) and there's no reason to expose winetricks
-    /// verbs as an alternative; dxmt-only only matters for
-    /// interactive_setup.py's own *interactive* prompt-skipping —
+    /// runtime-mode or dxmt-only choice either: redist installs exactly the
+    /// set the engine declares, pinned and checksummed, so there's no reason
+    /// to expose winetricks verbs as an alternative; dxmt-only only matters
+    /// for interactive_setup.py's own *interactive* prompt-skipping —
     /// irrelevant here since backend and runtime-mode are always passed
     /// explicitly as flags.
     ///
@@ -69,7 +69,8 @@ extension AppModel {
             skipFinderAlias: false,
             forceExe: false,
             updateUSVFS: true,
-            usvfsSource: SetupDefaults.defaultUSVFSSource
+            usvfsSource: SetupDefaults.defaultUSVFSSource,
+            redistInstallerDirectory: redistInstallerDirectory
         )
     }
 

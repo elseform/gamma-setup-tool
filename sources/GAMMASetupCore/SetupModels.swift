@@ -87,6 +87,12 @@ public struct WineEngineSetupRequest: Codable {
     public var forceExe: Bool
     public var updateUSVFS: Bool
     public var usvfsSource: String
+    /// Directory holding already-downloaded Microsoft installers. nil or empty
+    /// means cache-then-network; a supplied one wins over both. Optional, like
+    /// every other added-later field here: a synthesised `init(from:)` ignores
+    /// property defaults, so a non-optional would reject every request written
+    /// before this field existed.
+    public var redistInstallerDirectory: String?
 
     public init(
         archivePath: String? = nil,
@@ -103,7 +109,8 @@ public struct WineEngineSetupRequest: Codable {
         skipFinderAlias: Bool = false,
         forceExe: Bool = false,
         updateUSVFS: Bool = true,
-        usvfsSource: String = SetupDefaults.defaultUSVFSSource
+        usvfsSource: String = SetupDefaults.defaultUSVFSSource,
+        redistInstallerDirectory: String? = nil
     ) {
         self.archivePath = archivePath
         self.releaseArchiveURL = releaseArchiveURL
@@ -120,6 +127,7 @@ public struct WineEngineSetupRequest: Codable {
         self.forceExe = forceExe
         self.updateUSVFS = updateUSVFS
         self.usvfsSource = usvfsSource
+        self.redistInstallerDirectory = redistInstallerDirectory
     }
 }
 

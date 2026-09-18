@@ -466,7 +466,7 @@ if [[ -d "$GAMMA_NVNGX_SYSTEM32" ]]; then
   GAMMA_NVNGX_SRC_DIR=""
   case "$GAMMA_GRAPHICS_BACKEND" in
     dxmt)
-      if [[ "${DXMT_ENABLE_NVEXT:-0}" == "1" ]]; then
+      if [[ "${DXMT_ENABLE_NVEXT:-1}" == "1" ]]; then
         GAMMA_NVNGX_SRC_DIR="$ENGINE_DIR/lib/dxmt/x86_64-windows"
       fi
       ;;
@@ -1045,30 +1045,32 @@ def run_setup(args: argparse.Namespace) -> None:
     (app_path / "Contents/Info.plist").write_text(info_plist)
 
     # Settings live outside the bundle: editing them must not break the
-    # signature. Minimal, backend-conditional seed — only the always-on
-    # vars for the chosen backend; every optional/untested var stays absent
-    # (Configurator's default = disabled). No inline comments: Configurator
-    # is the documented interface now (runtime/configurator/configurator.py's
-    # SCHEMA), this file is generated output. Keep this seed's var
-    # names/quoting in sync with that SCHEMA by hand — there is no automated
-    # check.
+    # signature. Backend-conditional seed — the always-on vars for the chosen
+    # backend plus the GAMMA defaults below; every other optional var stays
+    # absent (Configurator's default = disabled). No inline comments:
+    # Configurator is the documented interface (the engine's
+    # runtime/configurator-gui/Sources/Schema.swift), and on first launch it
+    # seeds its own state from exactly this file, so what is written here *is*
+    # the default. Keep var names/quoting in sync with that schema by hand —
+    # there is no automated check. DXMT_CONFIG uses the packed
+    # "key=value;" form the Configurator parses and re-serialises.
     if config_file.is_file():
         log(f"  Keeping existing settings: {config_file}")
     else:
         lines = [
-            "# Edit via Contents/MacOS/configurator — see it for descriptions and valid ranges.",
+            "# Edit via Contents/Resources/Configurator.app — see it for descriptions and valid ranges.",
             "",
-            f"export GAMMA_GRAPHICS_BACKEND={graphics_backend}",
             f"export EXE_PATH='{exe_win_path}'",
             f"export EXE_RUN_DIR='{exe_run_dir}'",
             "",
-            "export MTL_HUD_ENABLED=0",
+            f"export GAMMA_GRAPHICS_BACKEND={graphics_backend}",
             "export WINEMSYNC=1",
             "export WINEESYNC=1",
             "export ROSETTA_ADVERTISE_AVX=0",
-            'export WINEDEBUG="-all"',
-            'export DEFAULT_GAME_ARGS=""',
             f"export GAMMA_RETINA_MODE={retina_mode}",
+            "export MTL_HUD_ENABLED=0",
+            'export WINEDEBUG="-all"',
+            'export DEFAULT_GAME_ARGS="--dxgi-old"',
             "",
         ]
         if graphics_backend == "d3dmetal":
@@ -1082,7 +1084,8 @@ def run_setup(args: argparse.Namespace) -> None:
         else:
             lines += [
                 "export DXMT_METALFX_SPATIAL_SWAPCHAIN=0",
-                "export DXMT_ENABLE_NVEXT=0",
+                "export DXMT_ENABLE_NVEXT=1",
+                'export DXMT_CONFIG="d3d11.sampleNaNToZero=true;"',
             ]
         config_file.write_text("\n".join(lines) + "\n")
         log(f"  Wrote settings: {config_file}")

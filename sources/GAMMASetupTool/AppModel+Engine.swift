@@ -12,7 +12,7 @@ extension AppModel {
     /// Reuses the existing MO2 detection (`selectedLaunchExecutablePath`,
     /// already correct for both the auto-detected and custom-exe cases) and
     /// appName/installDirectory fields. Backend is hardcoded to "dxmt": the
-    /// current known-good archive (CX26W11-GAMMA-DXMT-5.tar.zst, per
+    /// current known-good archive (CX26W11-GAMMA-DXMT-7.tar.zst, per
     /// gamma-wine-engine's own DXMT-suffixed naming) has no D3DMetal
     /// payload at all (`lib64/apple_gptk` is empty) — selecting it would
     /// hard-fail interactive_setup.py's own backend-presence check.

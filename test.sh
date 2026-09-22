@@ -10,7 +10,7 @@ mkdir -p "$BUILD_DIR" "$MODULE_CACHE_DIR"
 
 printf '==> Running Swift tests\n'
 swiftc \
-  -target arm64-apple-macosx13.0 \
+  -target arm64-apple-macosx15.0 \
   -module-cache-path "$MODULE_CACHE_DIR" \
   "$ROOT_DIR/sources/GAMMASetupCore/"*.swift \
   "$ROOT_DIR/sources/GAMMASetupTool/AppSettingsStore.swift" \
@@ -29,7 +29,7 @@ swiftc \
 
 printf '\n==> Building Swift setup engine for CLI tests\n'
 swiftc \
-  -target arm64-apple-macosx13.0 \
+  -target arm64-apple-macosx15.0 \
   -module-cache-path "$MODULE_CACHE_DIR" \
   "$ROOT_DIR/sources/GAMMASetupCore/"*.swift \
   "$ROOT_DIR/sources/GAMMASetupEngine/main.swift" \

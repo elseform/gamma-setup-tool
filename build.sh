@@ -55,7 +55,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE_DIR" "$INTERMEDIATES_DIR"
 swiftc \
   -parse-as-library \
   -Onone \
-  -target arm64-apple-macosx13.0 \
+  -target arm64-apple-macosx15.0 \
   -module-cache-path "$MODULE_CACHE_DIR" \
   -framework SwiftUI \
   -framework AppKit \
@@ -68,7 +68,7 @@ cp "$INTERMEDIATE_BINARY" "$BINARY"
 if [[ "$MODE" == "build" ]] || is_stale "$INTERMEDIATE_ENGINE_BINARY" "$ROOT_DIR"/sources/GAMMASetupCore/*.swift "$ROOT_DIR"/sources/GAMMASetupEngine/main.swift; then
   swiftc \
     -O \
-    -target arm64-apple-macosx13.0 \
+    -target arm64-apple-macosx15.0 \
     -module-cache-path "$MODULE_CACHE_DIR" \
     "$ROOT_DIR"/sources/GAMMASetupCore/*.swift \
     "$ROOT_DIR"/sources/GAMMASetupEngine/main.swift \
@@ -117,7 +117,7 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
   <key>CFBundleVersion</key>
   <string>APP_VERSION_PLACEHOLDER</string>
   <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
+  <string>15.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>

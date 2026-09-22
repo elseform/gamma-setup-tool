@@ -1032,7 +1032,7 @@ def run_setup(args: argparse.Namespace) -> None:
 \t<key>CFBundleVersion</key>
 \t<string>{engine_version}</string>
 \t<key>LSMinimumSystemVersion</key>
-\t<string>10.15</string>
+\t<string>15.0</string>
 \t<key>NSHighResolutionCapable</key>
 \t<true/>
 \t<key>NSSupportsAutomaticGraphicsSwitching</key>

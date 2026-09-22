@@ -1126,13 +1126,18 @@ def run_setup(args: argparse.Namespace) -> None:
         raise SetupError("Configurator.app is missing (expected in the engine artifact)")
     configurator_dst = app_path / "Contents/Resources/Configurator.app"
     shutil.copytree(configurator_src, configurator_dst)
-    configurator_resources = configurator_dst / "Contents/Resources"
-    configurator_resources.mkdir(parents=True, exist_ok=True)
-    (configurator_resources / "paths.json").write_text(json.dumps({
+    # The Configurator reads the wrapper-level configurator-paths.json, which
+    # survives Configurator.app being replaced. The in-bundle paths.json is
+    # kept for Configurator builds that predate it.
+    configurator_paths = json.dumps({
         "configFile": str(config_file),
         "stateFile": str(state_file),
         "dxmtOnly": dxmt_only,
-    }))
+    })
+    (app_path / "Contents/Resources/configurator-paths.json").write_text(configurator_paths)
+    configurator_resources = configurator_dst / "Contents/Resources"
+    configurator_resources.mkdir(parents=True, exist_ok=True)
+    (configurator_resources / "paths.json").write_text(configurator_paths)
 
     for path in (launcher_path, winetricks_path, winecfg_path):
         os.chmod(path, 0o755)

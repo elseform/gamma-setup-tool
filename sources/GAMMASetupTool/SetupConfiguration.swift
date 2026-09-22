@@ -10,7 +10,6 @@ struct SetupConfiguration {
     var installDirectory = SetupConfiguration.defaultInstallDirectory
     var programBatch = "/mo2.bat"
     var launchBatches: [LaunchBatch] = []
-    var launchArguments = ""
     var saveVerboseLog = true
     var manualModOrganizerPath = ""
 
@@ -56,10 +55,6 @@ struct SetupConfiguration {
         let path = selectedLaunchExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
         return URL(fileURLWithPath: path).pathExtension.caseInsensitiveCompare("exe") == .orderedSame
             && FileManager.default.fileExists(atPath: path)
-    }
-
-    var launchArgumentsAreValid: Bool {
-        !SetupLaunchBatchTools.containsLineBreak(launchArguments)
     }
 
     var environmentOK: Bool {

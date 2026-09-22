@@ -93,6 +93,8 @@ public struct WineEngineSetupRequest: Codable {
     /// property defaults, so a non-optional would reject every request written
     /// before this field existed.
     public var redistInstallerDirectory: String?
+    /// When set, every setup event is also written to this file.
+    public var logFile: String?
 
     public init(
         archivePath: String? = nil,
@@ -110,7 +112,8 @@ public struct WineEngineSetupRequest: Codable {
         forceExe: Bool = false,
         updateUSVFS: Bool = true,
         usvfsSource: String = SetupDefaults.defaultUSVFSSource,
-        redistInstallerDirectory: String? = nil
+        redistInstallerDirectory: String? = nil,
+        logFile: String? = nil
     ) {
         self.archivePath = archivePath
         self.releaseArchiveURL = releaseArchiveURL
@@ -128,6 +131,7 @@ public struct WineEngineSetupRequest: Codable {
         self.updateUSVFS = updateUSVFS
         self.usvfsSource = usvfsSource
         self.redistInstallerDirectory = redistInstallerDirectory
+        self.logFile = logFile
     }
 }
 

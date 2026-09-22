@@ -5,10 +5,13 @@
 ### Main improvements
 
 - Replaced the Sikarugir wrapper pipeline with the `gamma-wine-engine` engine archive
-  (CrossOver 26.3 / Wine 11 with DXMT), driven through that project's
+  (CrossOver 26.3 / Wine 11 with DXMT), driven by this tool's own
   `interactive_setup.py`. The wizard no longer installs Homebrew casks or resolves
-  Winetricks itself; the engine archive carries the graphics backend and the Visual C++
-  and DirectX redistributables it needs.
+  Winetricks itself; the engine archive carries the graphics backend and a pinned list of
+  the Visual C++ and DirectX files it needs, which are downloaded from Microsoft's own
+  installers during setup and cached.
+- Requires an Apple Silicon Mac running macOS 15 or newer, as do the wrappers it creates.
+- `Save setup log` now writes a log to `~/Library/Logs/gamma-setup-tool/`.
 - The graphics backend is DXMT. D3DMetal is no longer bundled, and the renderer,
   display-resolution, and drive-mapping options are gone with the pipeline that used
   them — the engine mounts both `Z:` and `G:` on its own.
@@ -24,6 +27,8 @@
 - Removed the bundled GPTK4 D3DMetal payload, the bundled DirectX redistributable DLLs,
   and `recommended-settings.json`. None of them had a consumer left after the pipeline
   change.
+- Removed the launch-flags field. Launch arguments belong to the wrapper and are set in
+  its Configurator.
 
 ### Known limitation
 

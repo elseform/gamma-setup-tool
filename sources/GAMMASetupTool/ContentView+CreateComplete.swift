@@ -113,11 +113,8 @@ struct CreatePage: View {
 
     // Stage numbers (0-6) match SetupEngineStage's declaration order
     // (dependencies/wrapper/engine/prefix/driveMapping/winetricks/finalize)
-    // — interactive_setup.py emits that same schema directly (see
-    // gamma-wine-engine/scripts/interactive_setup.py and
-    // WineEngineSetup.swift), so the checkmark/progress mapping below still
-    // works unchanged; only the row labels needed to stop describing the
-    // Sikarugir pipeline.
+    // — interactive_setup.py (Resources/wine-engine/) emits that same schema
+    // directly, relayed by WineEngineSetup.swift.
     private var installStageRows: [(stage: Int, title: String, detail: String)] {
         [
             (0, "Preparing", "Resolving engine archive"),
@@ -125,7 +122,7 @@ struct CreatePage: View {
             (2, "Engine", "Extracting DXMT engine"),
             (3, "Prefix", "Bootstrapping Wine prefix"),
             (4, "Drive mapping", model.plannedWineDriveMapping),
-            (5, "Runtime dependencies", "Redist (bundled DLLs)"),
+            (5, "Runtime dependencies", "Microsoft redistributables"),
             (6, "Finalize", "Signing, registering & checking USVFS")
         ]
     }

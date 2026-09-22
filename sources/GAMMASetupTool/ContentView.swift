@@ -27,7 +27,7 @@ struct ContentView: View {
         .frame(minWidth: Layout.windowMinimumWidth, minHeight: Layout.windowMinimumHeight)
         .background(WindowMinimumSize(width: Layout.windowMinimumWidth, height: Layout.windowMinimumHeight))
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: step)
-        .onChange(of: model.isRunning) { isRunning in
+        .onChange(of: model.isRunning) { _, isRunning in
             if isRunning {
                 step = .create
                 furthestUnlockedStep = maxStep(furthestUnlockedStep, .create)

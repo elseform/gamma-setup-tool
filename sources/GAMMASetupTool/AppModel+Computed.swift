@@ -15,7 +15,6 @@ extension AppModel {
             installDirectory: installDirectory,
             programBatch: programBatch,
             launchBatches: launchBatches,
-            launchArguments: launchArguments,
             saveVerboseLog: saveVerboseLog,
             manualModOrganizerPath: manualModOrganizerPath
         )
@@ -79,7 +78,6 @@ extension AppModel {
             && driveMappingReady
             && wrapperNameIsValid
             && selectedLaunchExecutableFound
-            && configuration.launchArgumentsAreValid
             && !wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -100,17 +98,14 @@ extension AppModel {
     }
 
     var launchConfigurationIsValid: Bool {
-        selectedLaunchExecutableFound && configuration.launchArgumentsAreValid
+        selectedLaunchExecutableFound
     }
 
     var launchSelectionMessage: String {
-        if !configuration.launchArgumentsAreValid {
-            return "Launch flags must be a single line."
-        }
         if !selectedLaunchExecutableFound {
             return "Selected executable was not found."
         }
-        return "The executable and flags are written to the wrapper's launch batch."
+        return "The wrapper launches this executable. Launch arguments are set in the Configurator."
     }
 
     var requiredToolsOK: Bool {

@@ -50,6 +50,14 @@ final class RedistInstallerTests {
         XCTAssertEqual(decoded.redistInstallerDirectory, "/tmp/installers")
     }
 
+    func testRequestRoundTripsALogFile() throws {
+        let request = WineEngineSetupRequest(archivePath: "/tmp/engine.tar.zst", logFile: "/tmp/setup.log")
+        let data = try JSONEncoder().encode(request)
+        let decoded = try JSONDecoder().decode(WineEngineSetupRequest.self, from: data)
+
+        XCTAssertEqual(decoded.logFile, "/tmp/setup.log")
+    }
+
     func testEveryPinnedInstallerIsReportedOnce() {
         let statuses = RedistInstallers.statuses(
             userDirectory: "",

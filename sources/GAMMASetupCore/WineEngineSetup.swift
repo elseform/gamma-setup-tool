@@ -63,6 +63,14 @@ public final class WineEngineSetup {
     }
 
     public func create(request: WineEngineSetupRequest) throws {
+        if let logFile = request.logFile?.trimmingCharacters(in: .whitespacesAndNewlines), !logFile.isEmpty {
+            let logURL = URL(fileURLWithPath: (logFile as NSString).expandingTildeInPath)
+            try FileManager.default.createDirectory(
+                at: logURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try reporter.attachLog(logURL)
+        }
         let scriptURL = try locateScript()
         let cacheDir = appSupportDirectory.appendingPathComponent("cache/gamma-wine-engine")
         let archiveURL = try resolveArchive(request: request, cacheDir: cacheDir)

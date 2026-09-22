@@ -87,17 +87,6 @@ struct WrapperNamePage: View {
                     model.chooseLaunchExecutable()
                 }
             }
-
-            if model.programBatch != "/mo2.bat" {
-                HStack(spacing: 8) {
-                    Text("Flags")
-                        .frame(width: 38, alignment: .leading)
-                    TextField("Optional launch flags", text: $model.launchArguments)
-                        .textFieldStyle(.roundedBorder)
-                }
-                .padding(.leading, 34)
-                .padding(.bottom, 12)
-            }
         }
     }
 

@@ -2,7 +2,7 @@
 
 Native macOS tool for creating a Wine `.app` wrapper, built on [gamma-wine-engine](https://github.com/elseform/gamma-wine-engine), around an existing S.T.A.L.K.E.R. G.A.M.M.A. installation.
 
-GAMMA Setup Tool does not install G.A.M.M.A. itself. It requires an existing G.A.M.M.A. installation.
+GAMMA Setup Tool does not install G.A.M.M.A. itself. It requires an existing G.A.M.M.A. installation and an Apple Silicon Mac running macOS 15 or newer.
 
 See [CHANGELOG.md](CHANGELOG.md) for release highlights and notable behavior changes.
 
@@ -10,7 +10,9 @@ See [CHANGELOG.md](CHANGELOG.md) for release highlights and notable behavior cha
 
 Choose an app name, select the GAMMA folder that contains `ModOrganizer.exe`, then pick a gamma-wine-engine archive and review the wrapper settings. The tool then creates the `.app` wrapper in `~/Applications`.
 
-The engine is DXMT-only — there's no Wine engine, renderer, or display-behavior choice. Drive mapping always mounts the game root as `G:` and the host root as `Z:`. Runtime dependencies always install from the bundled redistributables (no winetricks verb selection).
+The engine is DXMT-only — there's no Wine engine, renderer, or display-behavior choice. Drive mapping always mounts the game root as `G:` and the host root as `Z:`. The Microsoft Visual C++ and DirectX runtime files the game needs are downloaded from Microsoft's own installers during setup (pinned by checksum and cached for later runs); no winetricks verb selection.
+
+Game and graphics settings, including launch arguments, are not part of setup. Each wrapper has a Configurator (the `<app name> Configurator` alias next to the app) that edits them.
 
 The tool checks that `ModOrganizer.exe` exists, but it does not validate the contents or health of the GAMMA installation.
 
@@ -24,7 +26,7 @@ The guided flow handles:
 
 - GAMMA and ModOrganizer folder selection.
 - gamma-wine-engine archive selection and drive-mapping review.
-- Bundled runtime dependencies and automatic USVFS updates.
+- Runtime dependencies from Microsoft's installers and automatic USVFS updates.
 
 ## How to Use
 
@@ -42,30 +44,18 @@ Because the release is not notarized, macOS may require you to approve the app i
 
 ### Build
 
-Build the app:
+Build and install the app (to `dist/` and `~/Applications/GAMMA Setup Tool.app`):
 
 ```text
-swift build
+./build.sh
 ```
 
-Building from source requires Apple's Command Line Tools or Xcode.
+`./build.sh run` builds and launches it; `./build.sh clean` removes build output. The script compiles with `swiftc` directly (no Xcode project), for Apple Silicon and macOS 15. Building requires Apple's Command Line Tools or Xcode.
 
-SwiftPM writes build products under:
-
-```text
-.build/
-```
-
-For UI iteration, build and immediately run the app target:
+Run the tests (Swift unit tests, the `gamma-setup-engine` CLI tests, and a build smoke test):
 
 ```text
-swift run GAMMASetupTool
-```
-
-Build artifacts, Swift module cache, and intermediates are kept under `.build/` so repeat builds are faster. To remove them:
-
-```text
-swift package clean
+./test.sh
 ```
 
 ### Source Layout
@@ -82,23 +72,18 @@ The app is split into:
 - `Components.swift`: reusable SwiftUI rows, tips, icons, and wizard step metadata.
 - `ContentView.swift` and `ContentView+*.swift`: wizard layout, navigation, and screens.
 - `GAMMASetupToolApp.swift`: app entry point.
-- `sources/GAMMASetupCore/`: shared setup engine models, path helpers, CLI preflight support, and installation services.
+- `sources/GAMMASetupCore/`: shared request and event models, the wrapper-creation pipeline that runs `interactive_setup.py`, and the USVFS and redistributable-installer services.
+- `sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py`: builds the wrapper from an engine archive.
 - `sources/GAMMASetupEngine/`: the setup backend launched by the GUI.
 
 The Swift package builds both the GUI and the `gamma-setup-engine` backend.
 
 ### Logs
 
-Setup logs are optional. Enable `Save detailed setup log` in the wrapper settings to create a log in `~/`:
+Setup logs are optional. With `Save setup log` enabled, every setup event is written to:
 
 ```text
-gamma-setup-tool.YYYYMMDD-HHMMSS.log
+~/Library/Logs/gamma-setup-tool/<app name>-YYYYMMDD-HHMMSS.log
 ```
 
-Dry-run logs use:
-
-```text
-gamma-setup-tool.dry-run.YYYYMMDD-HHMMSS.log
-```
-
-Logs are ignored by git. Private engine behavior, cache layout, and preset details are maintained in the `gamma-project` command-center documentation.
+Private engine behavior, cache layout, and preset details are maintained in the `gamma-project` command-center documentation.

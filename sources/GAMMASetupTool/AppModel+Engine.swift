@@ -12,11 +12,9 @@ extension AppModel {
     /// Reuses the existing MO2 detection (`selectedLaunchExecutablePath`,
     /// already correct for both the auto-detected and custom-exe cases) and
     /// appName/installDirectory fields. Backend is hardcoded to "dxmt": the
-    /// current known-good archive (CX26W11-GAMMA-DXMT-7.tar.zst, per
-    /// gamma-wine-engine's own DXMT-suffixed naming) has no D3DMetal
-    /// payload at all (`lib64/apple_gptk` is empty) — selecting it would
-    /// hard-fail interactive_setup.py's own backend-presence check.
-    /// Revisit once a build with both backends is the one in use. No
+    /// engine archives this tool installs (CX26W11-GAMMA-DXMT-<N>) carry no
+    /// D3DMetal payload (`lib64/apple_gptk` is absent), so selecting it would
+    /// hard-fail interactive_setup.py's own backend-presence check. No
     /// runtime-mode or dxmt-only choice either: redist installs exactly the
     /// set the engine declares, pinned and checksummed, so there's no reason
     /// to expose winetricks verbs as an alternative; dxmt-only only matters
@@ -58,20 +56,29 @@ extension AppModel {
             exeRelPath: nil,
             backend: "dxmt",
             runtimeMode: "redist",
-            // Also threads into the generated paths.json (dxmtOnly), which
-            // Configurator.app reads to decide whether to show the D3DMetal
-            // backend option at all (ConfiguratorView.swift's
-            // `case .backend where model.dxmtOnly`) — leaving this false
-            // showed a picker offering a backend the archive doesn't
-            // actually have a payload for.
+            // Written into the Configurator's paths file as dxmtOnly. The
+            // Configurator also detects a DXMT-only engine on its own; this
+            // flag can only narrow what it offers, never widen it.
             dxmtOnly: true,
             yes: true,
             skipFinderAlias: false,
             forceExe: false,
             updateUSVFS: true,
             usvfsSource: SetupDefaults.defaultUSVFSSource,
-            redistInstallerDirectory: redistInstallerDirectory
+            redistInstallerDirectory: redistInstallerDirectory,
+            logFile: saveVerboseLog ? Self.newSetupLogPath(appName: appName) : nil
         )
+    }
+
+    /// ~/Library/Logs/gamma-setup-tool/<app name>-<timestamp>.log
+    static func newSetupLogPath(appName: String, date: Date = Date()) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/gamma-setup-tool", isDirectory: true)
+        let name = appName.isEmpty ? "setup" : appName
+        return logs.appendingPathComponent("\(name)-\(formatter.string(from: date)).log").path
     }
 
     // MARK: - Process Execution

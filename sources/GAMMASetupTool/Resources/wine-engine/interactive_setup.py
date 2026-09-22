@@ -39,7 +39,6 @@ import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
 
 JSON_MODE = False
 _CURRENT_STAGE = None
@@ -640,17 +639,9 @@ def load_redist_fetcher(engine_dir: Path):
     this script needs no knowledge of Microsoft's installers — and no copy of
     their DLLs, which are not ours to redistribute.
     """
-    manifest_candidates = [
-        engine_dir / "share/gamma/redist-manifest.json",
-        REPO_ROOT / "config/redist-manifest.json",
-    ]
-    module_candidates = [
-        engine_dir / "share/gamma/redist-fetch/gamma_redist.py",
-        REPO_ROOT / "runtime/redist-fetch/gamma_redist.py",
-    ]
-    manifest_path = next((p for p in manifest_candidates if p.is_file()), None)
-    module_path = next((p for p in module_candidates if p.is_file()), None)
-    if manifest_path is None or module_path is None:
+    manifest_path = engine_dir / "share/gamma/redist-manifest.json"
+    module_path = engine_dir / "share/gamma/redist-fetch/gamma_redist.py"
+    if not manifest_path.is_file() or not module_path.is_file():
         raise SetupError(
             "this engine archive predates the redist manifest: it has no "
             "share/gamma/redist-manifest.json and share/gamma/redist-fetch/. "
@@ -715,14 +706,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def default_artifact_path() -> str:
-    artifacts_dir = REPO_ROOT / "dist/artifacts"
-    candidates = list(artifacts_dir.glob("*.tar.zst")) + list(artifacts_dir.glob("*.tar.xz"))
-    if not candidates:
-        return str(artifacts_dir / "engine.tar.zst")
-    return str(max(candidates, key=lambda p: p.stat().st_mtime))
-
-
 def symlink_force(link: Path, target) -> None:
     # CrossOver's own `wineboot -u` pre-creates a real (non-symlink)
     # drive_c/users/crossover directory as part of its default profile
@@ -746,9 +729,8 @@ def run_setup(args: argparse.Namespace) -> None:
     log("==========================================================")
 
     # 1. Collect paths
-    default_artifact = default_artifact_path()
     while True:
-        artifact_str = prompt("Path to engine archive (.tar.zst or .tar.xz)", default_artifact, args.archive)
+        artifact_str = prompt("Path to engine archive (.tar.zst or .tar.xz)", "", args.archive)
         artifact_path = Path(artifact_str).expanduser()
         if artifact_path.is_file():
             break
@@ -1208,7 +1190,7 @@ def run_setup(args: argparse.Namespace) -> None:
     log(f"  Backend:  {graphics_backend}  (change it in app.env, no rebuild needed)")
     log(f"  Dependencies: {runtime_mode}")
     if graphics_backend == "d3dmetal":
-        log("  GPTK:     staged by install-renderers.sh (--apple-gptk selects the version)")
+        log("  GPTK:     from the engine archive's lib64/apple_gptk")
         log(f"            d3d10=builtin override added for {Path(exe_rel_path).name}")
     log("")
     log(f'Launch via:  open "{app_path}"')

@@ -140,7 +140,6 @@ extension AppModel {
 
     func useDefaultLaunchConfiguration() {
         useModOrganizerLaunch()
-        launchArguments = ""
     }
 
     func setLaunchExecutable(_ executablePath: String) {

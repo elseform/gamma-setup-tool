@@ -86,12 +86,6 @@ final class SetupConfigurationTests {
         )
     }
 
-    func testLaunchArgumentsRejectLineBreaks() {
-        XCTAssertTrue(SetupConfiguration(launchArguments: "--dxgi-old").launchArgumentsAreValid)
-        XCTAssertTrue(SetupConfiguration(launchArguments: "   ").launchArgumentsAreValid)
-        XCTAssertFalse(SetupConfiguration(launchArguments: "--a\n--b").launchArgumentsAreValid)
-    }
-
     /// interactive_setup.py mounts both Z: and G: unconditionally, so there is
     /// no drive-mapping mode any more — G: is simply derived from the resolved
     /// launch target, two components up.

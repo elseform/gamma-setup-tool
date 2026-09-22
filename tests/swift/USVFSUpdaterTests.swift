@@ -145,4 +145,8 @@ final class USVFSUpdaterTests {
         XCTAssertTrue(updater.isModOrganizerDirectory(dir))
         XCTAssertFalse(updater.isModOrganizerDirectory(root))
     }
+
+    func testUSVFSDefaultSourceIsNotUserSpecific() {
+        XCTAssertEqual(SetupDefaults.defaultUSVFSSource, "")
+    }
 }

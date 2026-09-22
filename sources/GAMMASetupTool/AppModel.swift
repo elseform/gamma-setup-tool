@@ -41,7 +41,6 @@ final class AppModel: ObservableObject {
     @Published var installDirectory = SetupConfiguration.defaultInstallDirectory
     @Published var programBatch = "/mo2.bat"
     @Published var launchBatches: [LaunchBatch] = []
-    @Published var launchArguments = ""
     @Published var saveVerboseLog = true
     @Published var manualModOrganizerPath = ""
     @Published var logText = ""

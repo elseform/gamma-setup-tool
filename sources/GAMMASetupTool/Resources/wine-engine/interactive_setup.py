@@ -1070,7 +1070,7 @@ def run_setup(args: argparse.Namespace) -> None:
             f"export GAMMA_RETINA_MODE={retina_mode}",
             "export MTL_HUD_ENABLED=0",
             'export WINEDEBUG="-all"',
-            'export DEFAULT_GAME_ARGS="--dxgi-old"',
+            'export DEFAULT_GAME_ARGS=""',
             "",
         ]
         if graphics_backend == "d3dmetal":

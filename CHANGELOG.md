@@ -14,6 +14,10 @@
   them — the engine mounts both `Z:` and `G:` on its own.
 - Setup progress is now reported directly from the engine script rather than parsed out
   of its console output.
+- The bundled ModOrganizer `usvfs` files are only written into a folder that contains
+  `ModOrganizer.exe`; a custom launch executable elsewhere no longer receives them. MO2's
+  own copies that differ are backed up to `gamma-setup-tool-backups/usvfs-<timestamp>/`
+  in the MO2 folder before being replaced.
 
 ### Removals
 

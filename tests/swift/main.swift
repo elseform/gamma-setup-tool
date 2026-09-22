@@ -101,6 +101,14 @@ run("testEveryPinnedInstallerIsReportedOnce", redist.testEveryPinnedInstallerIsR
 run("testCachedInstallersAreReportedAsPresent", redist.testCachedInstallersAreReportedAsPresent)
 run("testASuppliedDirectoryWinsOverTheCache", redist.testASuppliedDirectoryWinsOverTheCache)
 
+let usvfs = USVFSUpdaterTests()
+run("testNonModOrganizerFolderIsLeftUntouched", usvfs.testNonModOrganizerFolderIsLeftUntouched)
+run("testMatchingBinariesAreNotRewrittenOrBackedUp", usvfs.testMatchingBinariesAreNotRewrittenOrBackedUp)
+run("testDifferingBinariesAreBackedUpThenReplaced", usvfs.testDifferingBinariesAreBackedUpThenReplaced)
+run("testMissingBinariesAreInstalledWithoutABackup", usvfs.testMissingBinariesAreInstalledWithoutABackup)
+run("testRepeatedUpdatesKeepEarlierBackups", usvfs.testRepeatedUpdatesKeepEarlierBackups)
+run("testModOrganizerDetectionIgnoresLetterCase", usvfs.testModOrganizerDetectionIgnoresLetterCase)
+
 let tones = SetupStatusToneTests()
 run("testCheckRowTonesMatchEnvironmentColoringRules", tones.testCheckRowTonesMatchEnvironmentColoringRules)
 run("testStatusRowTonesMatchCheckRows", tones.testStatusRowTonesMatchCheckRows)

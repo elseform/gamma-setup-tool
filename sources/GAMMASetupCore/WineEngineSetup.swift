@@ -105,33 +105,27 @@ public final class WineEngineSetup {
 
     /// MO2's own bundled usvfs_*.dll/exe live in MO2's install folder, not
     /// the Wine prefix — unrelated to which engine build runs it. Always
-    /// checked (no user-facing toggle): a byte-for-byte compare decides
-    /// whether anything is actually copied, same skip-if-unchanged logic
-    /// the Sikarugir pipeline already uses (SetupEngine.swift's
-    /// installUSVFSUpdateForEngine).
+    /// checked (no user-facing toggle). `mo2Path` is the selected launch
+    /// executable, which may be a custom one outside MO2, so USVFSUpdater
+    /// only writes when that folder holds ModOrganizer.exe, and backs up
+    /// MO2's differing originals before replacing them.
     private func updateUSVFSIfNeeded(request: WineEngineSetupRequest) throws {
         guard !request.mo2Path.isEmpty else { return }
-        let mo2Dir = URL(fileURLWithPath: request.mo2Path).deletingLastPathComponent()
-        guard fileManager.fileExists(atPath: mo2Dir.path) else { return }
+        let launchDir = URL(fileURLWithPath: (request.mo2Path as NSString).expandingTildeInPath)
+            .deletingLastPathComponent()
+        guard fileManager.fileExists(atPath: launchDir.path) else { return }
 
         let source = try locateUSVFSSource(override: request.usvfsSource)
-        let files = ["usvfs_x64.dll", "usvfs_proxy_x64.exe", "usvfs_x86.dll", "usvfs_proxy_x86.exe"]
-        for file in files where !fileManager.fileExists(atPath: source.appendingPathComponent(file).path) {
-            throw WineEngineSetupError.message("missing bundled usvfs binary: \(source.appendingPathComponent(file).path)")
-        }
-        if files.allSatisfy({
-            fileManager.contentsEqual(
-                atPath: source.appendingPathComponent($0).path,
-                andPath: mo2Dir.appendingPathComponent($0).path
-            )
-        }) {
+        switch try USVFSUpdater(fileManager: fileManager).update(modOrganizerDirectory: launchDir, from: source) {
+        case .notModOrganizer(let dir):
+            reporter.log("Skipping USVFS update: no \(USVFSUpdater.modOrganizerExecutableName) in \(dir.path)")
+        case .upToDate:
             reporter.log("USVFS binaries already up to date")
-            return
-        }
-        reporter.log("Updating USVFS binaries in \(mo2Dir.path)")
-        for file in files {
-            try? fileManager.removeItem(at: mo2Dir.appendingPathComponent(file))
-            try fileManager.copyItem(at: source.appendingPathComponent(file), to: mo2Dir.appendingPathComponent(file))
+        case .updated(let dir, let replaced, let backup):
+            reporter.log("Updated USVFS binaries in \(dir.path): \(replaced.joined(separator: ", "))")
+            if let backup {
+                reporter.log("Previous USVFS binaries backed up to \(backup.path)")
+            }
         }
     }
 

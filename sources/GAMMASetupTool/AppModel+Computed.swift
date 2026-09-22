@@ -159,7 +159,7 @@ extension AppModel {
         add("Executable", configuration.selectedLaunchExecutablePath)
         add("Engine archive", wineEngineArchivePath.isEmpty ? "Not selected" : wineEngineArchivePath)
         add("Backend", "DXMT")
-        add(SetupOptionCopy.usvfsBinaries, "Checked automatically, updated if outdated")
+        add(SetupOptionCopy.usvfsBinaries, "ModOrganizer folder only; outdated files backed up, then replaced")
         if saveVerboseLog {
             add(SetupOptionCopy.logTitle, SetupOptionCopy.logAction)
         }

@@ -73,6 +73,11 @@ public struct LaunchBatch: Codable, Identifiable, Equatable {
 /// whichever D3DMetal/DXMT backend support it needs.
 public struct WineEngineSetupRequest: Codable {
     public var archivePath: String?
+    /// Superseded by automatic release resolution (EngineReleaseResolver):
+    /// with archivePath empty, WineEngineSetup now resolves and downloads the
+    /// newest published gamma-wine-engine release on its own. Kept, and still
+    /// decoded, only so an old request file with this field set doesn't fail
+    /// to decode; nothing sets or reads it any more.
     public var releaseArchiveURL: String?
     public var appName: String
     public var appParent: String
@@ -137,4 +142,23 @@ public struct WineEngineSetupRequest: Codable {
 
 public enum SetupDefaults {
     public static let defaultUSVFSSource = ""
+
+    /// This build's own version, used both as the UI footer's fallback and as
+    /// what an engine's `minimumSetupToolVersion` is checked against. Kept in
+    /// step with `build.sh`'s `APP_VERSION` by a test (`build.sh` has no way to
+    /// read a Swift constant, so the check runs the other direction).
+    public static let toolVersion = "0.90"
+
+    /// Below this, an engine archive is refused outright even with no
+    /// network and no cached release info — the last-resort floor in
+    /// EngineFloor. A full version, not just a build counter: ordering
+    /// compares CrossOver/Wine/Gamma generation before the build counter, so
+    /// a floor built from an all-zero placeholder generation would be
+    /// outranked by any real archive regardless of its build number, making
+    /// it no floor at all. Bumped only when an older build in this same
+    /// generation becomes known broken, never merely because a newer one was
+    /// published.
+    public static let minimumSupportedEngine = EngineBuildVersion(
+        crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 1
+    )
 }

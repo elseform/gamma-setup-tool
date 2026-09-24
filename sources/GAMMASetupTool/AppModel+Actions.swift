@@ -19,21 +19,22 @@ extension AppModel {
         if let gammaPath = settings.gammaPath?.trimmingCharacters(in: .whitespacesAndNewlines), !gammaPath.isEmpty {
             manualModOrganizerPath = URL(fileURLWithPath: gammaPath).appendingPathComponent("ModOrganizer.exe").path
         }
-        if wineEngineArchivePath.isEmpty, let detected = Self.autoDetectedWineEngineArchive() {
+        if wineEngineArchivePath.isEmpty, let detected = Self.devArchiveFromEnvironment() {
             wineEngineArchivePath = detected
         }
         useDefaultLaunchConfiguration()
     }
 
-    /// gamma-wine-engine has no published release yet (see
-    /// ContentView+Setup.swift's engineArchiveControls comment /
-    /// gamma-wine-engine/scripts/publish-release.sh), so during local
-    /// testing prefill the newest archive built in the sibling checkout
-    /// instead of requiring "Choose…" every run. Remove once that repo
-    /// ships real releases and the archive picker becomes a real download.
-    static func autoDetectedWineEngineArchive() -> String? {
-        let artifactsDir = URL(fileURLWithPath: NSHomeDirectory())
-            .appendingPathComponent("projects/2_2_gamma/gamma-wine-engine/dist/artifacts")
+    /// Local-build prefill for development only, opted into by setting
+    /// GAMMA_ENGINE_ARTIFACTS_DIR — never a path baked into the app. With the
+    /// field left empty (the default for every user), the engine resolves and
+    /// downloads the newest published release itself; see
+    /// WineEngineSetup.resolveArchive.
+    static func devArchiveFromEnvironment() -> String? {
+        guard let dir = ProcessInfo.processInfo.environment["GAMMA_ENGINE_ARTIFACTS_DIR"], !dir.isEmpty else {
+            return nil
+        }
+        let artifactsDir = URL(fileURLWithPath: (dir as NSString).expandingTildeInPath)
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: artifactsDir,
             includingPropertiesForKeys: [.contentModificationDateKey],

@@ -59,24 +59,24 @@ struct SetupPage: View {
     }
 
     // gamma-wine-engine ships its own engine build — there is no
-    // CX/Sikarugir choice for this pipeline. No release is published yet
-    // (see gamma-wine-engine/scripts/publish-release.sh), so this is a
-    // local-file picker rather than a download; swap for a download once
-    // that lands.
+    // CX/Sikarugir choice for this pipeline. Left empty (the default), the
+    // newest published gamma-wine-engine release is resolved and downloaded
+    // automatically; a path here is an explicit local override, refused the
+    // same way a downloaded release is if it is older than the current floor.
     private var engineArchiveControls: some View {
         VStack(alignment: .leading, spacing: 6) {
             CardHeading(title: "Engine archive")
             HStack(spacing: 8) {
-                TextField(".tar.zst or .tar.xz path", text: $model.wineEngineArchivePath)
+                TextField("Automatic (downloads the latest release)", text: $model.wineEngineArchivePath)
                     .textFieldStyle(.roundedBorder)
                 Button("Choose…") {
                     model.chooseWineEngineArchive()
                 }
             }
-            if model.wineEngineArchivePath.isEmpty {
-                Text("Required — pick a gamma-wine-engine build (e.g. dist/artifacts/*.tar.zst).")
+            if !model.wineEngineArchivePath.isEmpty {
+                Text("Using this local archive instead of the latest published release.")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.secondary)
             }
         }
     }

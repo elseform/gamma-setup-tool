@@ -39,7 +39,7 @@ do {
     case "create-wine-engine":
         let request = try loadWineEngineRequest(from: arguments)
         let wineEngineSetup = WineEngineSetup(executablePath: CommandLine.arguments[0], reporter: reporter)
-        try wineEngineSetup.create(request: request)
+        try await wineEngineSetup.create(request: request)
     case "-h", "--help":
         print(usage())
     default:

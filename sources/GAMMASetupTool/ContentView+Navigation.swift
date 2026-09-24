@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if SWIFT_PACKAGE
+import GAMMASetupCore
+#endif
+
 extension ContentView {
     // MARK: - Header
 
@@ -68,7 +72,7 @@ extension ContentView {
     // MARK: - Footer
 
     private var footerVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.90"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? SetupDefaults.toolVersion
     }
 
     var footer: some View {

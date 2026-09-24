@@ -73,12 +73,15 @@ extension AppModel {
         configuration.createFlowEnvironmentOK
     }
 
+    /// An empty wineEngineArchivePath is valid on its own: the engine then
+    /// resolves and downloads the newest published gamma-wine-engine release
+    /// (see WineEngineSetup.resolveArchive). A non-empty path is an explicit
+    /// local override, still gated the same way a downloaded release is.
     var setupReady: Bool {
         configuration.createFlowEnvironmentOK
             && driveMappingReady
             && wrapperNameIsValid
             && selectedLaunchExecutableFound
-            && !wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var selectedModOrganizerExecutableFound: Bool {
@@ -152,7 +155,7 @@ extension AppModel {
 
         add("App", outputAppPath)
         add("Executable", configuration.selectedLaunchExecutablePath)
-        add("Engine archive", wineEngineArchivePath.isEmpty ? "Not selected" : wineEngineArchivePath)
+        add("Engine archive", wineEngineArchivePath.isEmpty ? "Automatic (latest release)" : wineEngineArchivePath)
         add("Backend", "DXMT")
         add(SetupOptionCopy.usvfsBinaries, "ModOrganizer folder only; outdated files backed up, then replaced")
         if saveVerboseLog {

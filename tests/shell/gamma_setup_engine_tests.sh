@@ -39,6 +39,23 @@ expect_failure() {
   fi
 }
 
+# A minimal but valid engine archive: just enough for EngineArchiveProbe and
+# EngineArchiveGate to accept it (a parseable versionLabel and a build number
+# high enough to clear any floor), so tests past archive resolution can rely
+# on it existing rather than being empty. The tar/zstd extension doesn't need
+# real compression — tar/libarchive detect the format from content, not the
+# name — so a plain tar is enough and needs no zstd binary.
+write_archive_fixture() {
+  local path="$1"
+  local staging
+  staging="$(mktemp -d "$TMP_ROOT/fixture.XXXXXX")"
+  mkdir -p "$staging/wswine.bundle"
+  cat >"$staging/wswine.bundle/engine-manifest.json" <<'JSON'
+{"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":999999}
+JSON
+  (cd "$staging" && tar -cf "$path" wswine.bundle)
+}
+
 # A request whose only interesting property is which field is missing.
 # appParent points somewhere that must stay untouched, so we can prove no
 # wrapper was created on the failure paths.
@@ -104,11 +121,16 @@ expect_failure "malformed request file" "$TMP_ROOT/bad.out" "$TMP_ROOT/bad.err" 
   -- create-wine-engine --request-file "$TMP_ROOT/bad-request.json"
 assert_contains "$TMP_ROOT/bad.err" "error:"
 
-printf '==> CLI requires an engine archive source\n'
+printf '==> CLI falls back to release resolution with no local archive given\n'
+# An empty archivePath is not itself an error any more — WineEngineSetup then
+# tries to resolve the newest published gamma-wine-engine release. That fails
+# here (no real GitHub release exists yet, or no network in this sandbox), but
+# the failure comes from EngineReleaseResolver, not a bare "missing archive"
+# refusal.
 write_request "$TMP_ROOT/no-archive.json" "" ""
 expect_failure "no archive source" "$TMP_ROOT/no-archive.out" "$TMP_ROOT/no-archive.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/no-archive.json"
-assert_contains "$TMP_ROOT/no-archive.err" "one of the two is required"
+assert_contains "$TMP_ROOT/no-archive.err" "could not resolve a published release"
 
 printf '==> CLI rejects an archivePath that does not exist\n'
 write_request "$TMP_ROOT/ghost-archive.json" "$TMP_ROOT/ghost.tar.zst" ""
@@ -117,10 +139,10 @@ expect_failure "ghost archive" "$TMP_ROOT/ghost.out" "$TMP_ROOT/ghost.err" \
 assert_contains "$TMP_ROOT/ghost.err" "engine archive not found:"
 
 printf '==> Archive resolution runs before launch-target resolution\n'
-# A present-but-empty archive gets past resolveArchive, so the next failure
-# proves the ordering inside WineEngineSetup.create() without ever reaching
-# interactive_setup.py.
-: >"$TMP_ROOT/present.tar.zst"
+# A present and valid archive gets past resolveArchive (including its
+# manifest probe and version gate), so the next failure proves the ordering
+# inside WineEngineSetup.create() without ever reaching interactive_setup.py.
+write_archive_fixture "$TMP_ROOT/present.tar.zst"
 write_request "$TMP_ROOT/no-mo2.json" "$TMP_ROOT/present.tar.zst" ""
 expect_failure "no launch target" "$TMP_ROOT/no-mo2.out" "$TMP_ROOT/no-mo2.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/no-mo2.json"

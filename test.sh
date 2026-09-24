@@ -20,6 +20,7 @@ swiftc \
   "$ROOT_DIR/tests/swift/AppSettingsStoreTests.swift" \
   "$ROOT_DIR/tests/swift/SetupConfigurationTests.swift" \
   "$ROOT_DIR/tests/swift/RedistInstallerTests.swift" \
+  "$ROOT_DIR/tests/swift/EngineArchiveTests.swift" \
   "$ROOT_DIR/tests/swift/SetupStatusToneTests.swift" \
   "$ROOT_DIR/tests/swift/USVFSUpdaterTests.swift" \
   "$ROOT_DIR/tests/swift/main.swift" \

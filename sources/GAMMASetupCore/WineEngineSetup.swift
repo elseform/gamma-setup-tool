@@ -62,7 +62,7 @@ public final class WineEngineSetup {
         return nil
     }
 
-    public func create(request: WineEngineSetupRequest) throws {
+    public func create(request: WineEngineSetupRequest) async throws {
         if let logFile = request.logFile?.trimmingCharacters(in: .whitespacesAndNewlines), !logFile.isEmpty {
             let logURL = URL(fileURLWithPath: (logFile as NSString).expandingTildeInPath)
             try FileManager.default.createDirectory(
@@ -73,7 +73,7 @@ public final class WineEngineSetup {
         }
         let scriptURL = try locateScript()
         let cacheDir = appSupportDirectory.appendingPathComponent("cache/gamma-wine-engine")
-        let archiveURL = try resolveArchive(request: request, cacheDir: cacheDir)
+        let archiveURL = try await resolveArchive(request: request, cacheDir: cacheDir)
         let exeRelPath = try resolveExeRelPath(request: request)
         let pythonBin = try resolvePython3()
 
@@ -174,30 +174,60 @@ public final class WineEngineSetup {
         )
     }
 
-    private func resolveArchive(request: WineEngineSetupRequest, cacheDir: URL) throws -> URL {
+    /// Resolves the archive to install, then gates it. A local override
+    /// (`request.archivePath`) is used as given but still gated — an older
+    /// local build is refused outright, with no UI bypass; bisecting is done
+    /// with `interactive_setup.py` directly. With no override, the newest
+    /// published `gamma-wine-engine` release is resolved and downloaded.
+    private func resolveArchive(request: WineEngineSetupRequest, cacheDir: URL) async throws -> URL {
+        let archiveURL: URL
+        let archiveName: String?
+        let manifest: EngineManifest
+
         if let archivePath = request.archivePath, !archivePath.isEmpty {
             let url = URL(fileURLWithPath: (archivePath as NSString).expandingTildeInPath)
             guard fileManager.fileExists(atPath: url.path) else {
                 throw WineEngineSetupError.message("engine archive not found: \(url.path)")
             }
-            return url
+            archiveURL = url
+            archiveName = url.lastPathComponent
+            manifest = try EngineArchiveProbe.readManifest(archiveURL: url)
+        } else {
+            let release: ResolvedEngineRelease
+            do {
+                release = try await EngineReleaseResolver.fetchNewest()
+            } catch {
+                throw WineEngineSetupError.message(
+                    "no local engine archive selected and could not resolve a published release: \(error.localizedDescription)"
+                )
+            }
+            manifest = try await fetchReleaseManifest(release.manifestURL)
+            let downloader = EngineArchiveDownloader(cacheDirectory: cacheDir, reporter: reporter)
+            archiveURL = try await downloader.fetch(release: release, manifest: manifest)
+            archiveName = release.archiveName
         }
-        guard let releaseURLString = request.releaseArchiveURL, !releaseURLString.isEmpty,
-              let releaseURL = URL(string: releaseURLString) else {
-            throw WineEngineSetupError.message(
-                "no local archivePath and no releaseArchiveURL given; one of the two is required"
-            )
+
+        let floor = await EngineFloor.resolve(cacheDirectory: cacheDir)
+        switch EngineArchiveGate.evaluate(
+            manifest: manifest,
+            archiveName: archiveName,
+            floor: floor.version,
+            floorSource: floor.source
+        ) {
+        case .accept(let version):
+            reporter.log("Engine version: \(version)")
+            return archiveURL
+        case .refuse(let refusal):
+            throw WineEngineSetupError.message(refusal.description)
         }
-        try fileManager.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        let dest = cacheDir.appendingPathComponent(releaseURL.lastPathComponent)
-        if fileManager.fileExists(atPath: dest.path) {
-            reporter.log("Using cached engine archive: \(dest.path)")
-            return dest
+    }
+
+    private func fetchReleaseManifest(_ url: URL) async throws -> EngineManifest {
+        let (data, response) = try await URLSession.shared.data(from: url)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw WineEngineSetupError.message("could not fetch release manifest \(url.lastPathComponent): HTTP \(http.statusCode)")
         }
-        reporter.log("Downloading engine archive: \(releaseURLString)")
-        let data = try Data(contentsOf: releaseURL)
-        try data.write(to: dest)
-        return dest
+        return try EngineManifest.decode(from: data)
     }
 
     /// MO2 is the primary/default launch target — not the raw game exe

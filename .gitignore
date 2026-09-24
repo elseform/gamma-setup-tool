@@ -11,3 +11,4 @@ AGENTS.md
 .python-version
 *.orphan
 __pycache__/
+.claude-launcher/sessions.json

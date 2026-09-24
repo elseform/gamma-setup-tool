@@ -27,7 +27,7 @@ struct CreatePage: View {
                     SetupSummaryRow(item: item)
                 }
             }
-            .font(.system(size: 15))
+            .font(.body)
             .padding(.vertical, 4)
         }
         .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
@@ -37,25 +37,32 @@ struct CreatePage: View {
 
     private var runStatus: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if model.isRunning || model.installFailed {
+            if model.isRunning || createButtonSubmitted || model.installFailed {
                 WizardCard {
                     installStages
                 }
                 .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
 
                 ProgressView(value: model.progress)
+                    .accessibilityLabel("Wrapper creation progress")
 
                 if model.installFailed {
                     installFailureView
                 }
             }
 
-            if model.isRunning || !model.logText.isEmpty {
-                DisclosureGroup("Output", isExpanded: $model.showOutput) {
-                    TextEditor(text: $model.logText)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(height: 130)
-                        .border(Color(nsColor: .separatorColor))
+            if model.isRunning || model.installFailed || !model.logText.isEmpty {
+                DisclosureGroup("Setup output", isExpanded: $model.showOutput) {
+                    ScrollView {
+                        Text(model.logText.isEmpty ? "No setup output is available yet." : model.logText)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(8)
+                    }
+                    .frame(height: 130)
+                    .border(Color(nsColor: .separatorColor))
+                    .accessibilityLabel("Setup output")
                 }
             }
         }
@@ -68,11 +75,13 @@ struct CreatePage: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.red)
             VStack(alignment: .leading, spacing: 5) {
-                Text("Installation failed")
+                Text("Wrapper creation failed")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.red)
                 if model.savedLogPath.isEmpty {
-                    Text("Failed to save log. Expand Output and copy the visible log.")
+                    Text(model.saveVerboseLog
+                         ? "The setup log location is unavailable. Expand Setup output and copy any available details."
+                         : "Saving the setup log was turned off. Expand Setup output and copy any available details.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -92,7 +101,7 @@ struct CreatePage: View {
                         .help("Open log")
                     }
                 }
-                Text("Open the Discord support thread and attach the log.")
+                Text("For help, use Discord support below and share the log or setup output.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -102,7 +111,7 @@ struct CreatePage: View {
 
     private var installStages: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ForEach(Array(installStageRows.enumerated()), id: \.offset) { _, row in
+            ForEach(installStageRows, id: \.stage) { row in
                 installStageRow(row: row)
             }
         }
@@ -120,28 +129,38 @@ struct CreatePage: View {
             (0, "Preparing", "Resolving engine archive"),
             (1, model.wrapperStageTitle, ""),
             (2, "Engine", "Extracting DXMT engine"),
-            (3, "Prefix", "Bootstrapping Wine prefix"),
+            (3, "Wine prefix", "Preparing the Windows environment"),
             (4, "Drive mapping", model.plannedWineDriveMapping),
             (5, "Runtime dependencies", "Microsoft redistributables"),
-            (6, "Finalize", "Signing, registering & checking USVFS")
+            (6, "Finishing", "Signing the app and checking ModOrganizer USVFS")
         ]
     }
 
     private func installStageRow(row: (stage: Int, title: String, detail: String)) -> some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             stageIcon(for: row.stage)
+                .accessibilityHidden(true)
             Text(row.title)
                 .font(.caption.weight(.semibold))
             if !row.detail.isEmpty {
                 Text(row.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .frame(height: 16)
+        .frame(minHeight: 16)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(row.detail.isEmpty ? row.title : "\(row.title), \(row.detail)")
+        .accessibilityValue(stageStatus(for: row.stage))
+    }
+
+    private func stageStatus(for index: Int) -> String {
+        if model.installFailed && index == model.installStageIndex { return "Failed" }
+        if index <= model.installStageCompletedIndex { return "Completed" }
+        if index == model.installStageIndex { return "In progress" }
+        return "Pending"
     }
 
     private func stageIcon(for index: Int) -> some View {
@@ -183,7 +202,7 @@ struct CompletePage: View {
 
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                         GridRow {
-                            Text("App created:")
+                            Text("Application:")
                                 .foregroundStyle(.secondary)
                             Text(model.outputAppPath)
                                 .lineLimit(2)
@@ -192,10 +211,10 @@ struct CompletePage: View {
                         }
                         if model.saveVerboseLog {
                             GridRow {
-                                Text("Log saved:")
+                                Text("Setup log:")
                                     .foregroundStyle(.secondary)
                                 if model.savedLogPath.isEmpty {
-                                    Text("Log path not found")
+                                    Text("Log location unavailable")
                                         .foregroundStyle(.secondary)
                                 } else {
                                     Button {
@@ -206,16 +225,21 @@ struct CompletePage: View {
                                             .truncationMode(.middle)
                                     }
                                     .buttonStyle(.link)
-                                    .help("Show log")
+                                    .help("Open setup log")
                                 }
                             }
                         }
                     }
                     .font(.callout)
 
-                    Text("Open the new app to launch ModOrganizer.")
+                    Text("Open the new app to launch \(model.selectedLaunchExecutableLabel).")
+                        .font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("Use the adjacent Configurator alias to change game settings and launch arguments. If the alias is missing, open Configurator.app in the wrapper’s Contents/Resources folder.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: Layout.completeMaxWidth, alignment: .topLeading)

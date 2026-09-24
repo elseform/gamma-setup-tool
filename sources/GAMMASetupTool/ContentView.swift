@@ -5,7 +5,6 @@ struct ContentView: View {
     @StateObject var model = AppModel()
     @State var step: WizardStep = .wrapperName
     @State var furthestUnlockedStep = WizardStep.setup
-    @State var showWinetricksList = false
     @State var createButtonSubmitted = false
 
     var body: some View {

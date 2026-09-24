@@ -1,89 +1,110 @@
 # GAMMA Setup Tool
 
-Native macOS tool for creating a Wine `.app` wrapper, built on [gamma-wine-engine](https://github.com/elseform/gamma-wine-engine), around an existing S.T.A.L.K.E.R. G.A.M.M.A. installation.
+Status: current development version, 0.90 (`dev` branch).
 
-GAMMA Setup Tool does not install G.A.M.M.A. itself. It requires an existing G.A.M.M.A. installation and an Apple Silicon Mac running macOS 15 or newer.
+Native macOS tool for creating a Wine `.app` wrapper around an existing S.T.A.L.K.E.R. G.A.M.M.A. installation, using [gamma-wine-engine](https://github.com/elseform/gamma-wine-engine) and DXMT. It does not install G.A.M.M.A.
 
-See [CHANGELOG.md](CHANGELOG.md) for release highlights and notable behavior changes.
+This README describes the current source. Published builds are available on the [Releases page](https://github.com/elseform/gamma-setup-tool/releases); check the version and release notes before following these instructions with an older build.
 
-## Description
+## Requirements
 
-Choose an app name, select the GAMMA folder that contains `ModOrganizer.exe`, then pick a gamma-wine-engine archive and review the wrapper settings. The tool then creates the `.app` wrapper in `~/Applications`.
+- An Apple Silicon Mac running macOS 15 or newer, with Rosetta 2 for the Wine engine.
+- An existing G.A.M.M.A. installation and its `ModOrganizer.exe`, or another Windows executable to launch.
+- Python 3 available to setup. The backend checks `/usr/bin/python3`, `/opt/homebrew/bin/python3`, then `/usr/local/bin/python3`.
+- `zstd` for `.tar.zst` engine archives. `.tar.xz` archives are also supported.
+- Internet access for automatic engine resolution and missing runtime downloads. For offline setup, select a local engine archive and provide or cache the runtime files described below.
 
-The engine is DXMT-only — there's no Wine engine, renderer, or display-behavior choice. Drive mapping always mounts the game root as `G:` and the host root as `Z:`. The Microsoft Visual C++ and DirectX runtime files the game needs are downloaded from Microsoft's own installers during setup (pinned by checksum and cached for later runs); no winetricks verb selection.
+An engine archive can declare a higher minimum macOS or setup-tool version, which setup checks before creating the wrapper.
 
-Game and graphics settings, including launch arguments, are not part of setup. Each wrapper has a Configurator (the `<app name> Configurator` alias next to the app) that edits them.
+## Create a Wrapper
 
-The tool checks that `ModOrganizer.exe` exists, but it does not validate the contents or health of the GAMMA installation.
+Extract the downloaded setup-tool archive and open `GAMMA Setup Tool.app`, or [build the current source](#build-and-test). Builds made by `build.sh` are ad-hoc signed, not notarized.
 
-The setup flow creates a new wrapper and will not overwrite an existing app. If you encounter a problem, use the Discord support link in the app and attach the detailed setup log when available.
+1. Enter an application name. The wrapper is created in `~/Applications`; an existing app with the same name is refused.
+2. Click **Choose…** and select `ModOrganizer.exe` from your existing installation. You can select another `.exe` as the launch target instead.
+3. Continue to **Wrapper settings**. Leave **Engine archive** empty for automatic download, or choose a local `.tar.zst` or `.tar.xz` archive.
+4. Optionally expand **Microsoft redistributables** to see which runtime files are already present or choose a folder containing downloaded copies. Leave **Save setup log** enabled for troubleshooting.
+5. Continue to **Review settings**, then click **Create wrapper**.
+6. Launch the created app from Finder. Use the adjacent `<app name> Configurator` alias to change game and graphics settings, including launch arguments.
 
-## What It Does
+Setup checks the selected executable exists; it does not validate the contents or health of the G.A.M.M.A. installation.
 
-The app uses the selected `ModOrganizer.exe` path to create a native macOS app wrapper that launches G.A.M.M.A. through ModOrganizer.
+## Engine Selection and Downloads
 
-The guided flow handles:
+With **Engine archive** empty, setup resolves the newest valid `engine-*` release from `elseform/gamma-wine-engine`, ordered by engine version. It downloads the archive and verifies its SHA-256 against the release manifest. Cached archives are checked by checksum before reuse.
 
-- GAMMA and ModOrganizer folder selection.
-- gamma-wine-engine archive selection and drive-mapping review.
-- Runtime dependencies from Microsoft's installers and automatic USVFS updates.
+A local archive is an explicit override, but it still passes the version gate. Setup refuses engines older than the highest of the currently resolved release, the cached release version, and the minimum supported by this setup-tool build. Equal or newer versions are accepted. Unreadable manifests and unidentifiable builds are rejected; there is no wizard option to bypass the gate.
 
-## How to Use
+Automatic selection needs access to the release listing and manifest even when the archive is cached. If no release can be resolved, select a local archive. Local selection can proceed offline using the cached version floor or the compiled minimum.
 
-Open the [latest GitHub release](https://github.com/elseform/gamma-setup-tool/releases/latest) and download the GAMMA Setup Tool archive from its **Assets** section.
+The wizard creates DXMT wrappers with the engine's declared runtime dependencies. It has no renderer, Wine-version, Winetricks-verb, or display-mode selector.
 
-Extract it, then run:
+## Runtime Files and Installation Changes
 
-```text
-GAMMA Setup Tool.app
-```
+The engine archive supplies the runtime manifest and fetcher. Setup obtains the declared files from checksum-pinned downloads, reusing a supplied folder before the cache. The current runtime list includes:
 
-Because the release is not notarized, macOS may require you to approve the app in System Settings.
+- `VC_redist.x64.exe` — Visual C++ 2015–2022 Redistributable.
+- `directx_Jun2010_redist.exe` — DirectX End-User Runtime, June 2010.
+- `d3dcompiler_47.dll` — the Microsoft compiler DLL redistributed through Mozilla's `fxc2` repository.
 
-## Developer Notes
+The engine manifest controls the actual files and checksums; selecting a folder does not bypass verification.
 
-### Build
+Setup mounts the game root as `G:` and the host root as `Z:`. The wizard derives the game root as the parent of the selected executable's containing directory; review the mapping before creating the wrapper, especially with a custom executable.
 
-Build and install the app (to `dist/` and `~/Applications/GAMMA Setup Tool.app`):
+After wrapper creation, setup checks the bundled USVFS files against the selected executable's folder. It updates them only if that folder contains `ModOrganizer.exe`. Existing files that differ are backed up inside that folder under `gamma-setup-tool-backups/usvfs-<timestamp>/` before replacement; matching files are left alone. A custom executable outside a ModOrganizer folder receives no USVFS files.
 
-```text
-./build.sh
-```
+## Settings, Logs, and Caches
 
-`./build.sh run` builds and launches it; `./build.sh clean` removes build output. The script compiles with `swiftc` directly (no Xcode project), for Apple Silicon and macOS 15. Building requires Apple's Command Line Tools or Xcode.
-
-Run the tests (Swift unit tests, the `gamma-setup-engine` CLI tests, and a build smoke test):
-
-```text
-./test.sh
-```
-
-### Source Layout
-
-Swift GUI sources live in:
+Each wrapper has its own Wine prefix and settings outside the app bundle:
 
 ```text
-sources/GAMMASetupTool/
+~/Applications/<app name>.app
+~/Applications/<app name> Configurator
+~/Library/Application Support/<app name>/prefix/
+~/Library/Application Support/<app name>/app.env
 ```
 
-The app is split into:
+Setup seeds the wrapper's defaults, with no default launch arguments. Change settings through its Configurator. If the Finder alias could not be created, open `Contents/Resources/Configurator.app` inside the wrapper.
 
-- `AppModel.swift` and `AppModel+*.swift`: setup state, derived state, user actions, request construction, and process event handling.
-- `Components.swift`: reusable SwiftUI rows, tips, icons, and wizard step metadata.
-- `ContentView.swift` and `ContentView+*.swift`: wizard layout, navigation, and screens.
-- `GAMMASetupToolApp.swift`: app entry point.
-- `sources/GAMMASetupCore/`: shared request and event models, the wrapper-creation pipeline that runs `interactive_setup.py`, and the USVFS and redistributable-installer services.
-- `sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py`: builds the wrapper from an engine archive.
-- `sources/GAMMASetupEngine/`: the setup backend launched by the GUI.
-
-The Swift package builds both the GUI and the `gamma-setup-engine` backend.
-
-### Logs
-
-Setup logs are optional. With `Save setup log` enabled, every setup event is written to:
+With **Save setup log** enabled, setup events are written to:
 
 ```text
 ~/Library/Logs/gamma-setup-tool/<app name>-YYYYMMDD-HHMMSS.log
 ```
 
-Private engine behavior, cache layout, and preset details are maintained in the `gamma-project` command-center documentation.
+Downloads are cached at:
+
+```text
+~/Library/Application Support/gamma-setup-tool/cache/gamma-wine-engine/
+~/Library/Application Support/gamma-setup-tool/cache/redist-installers/
+```
+
+The engine cache also contains `latest-release.json`, the saved release version used by the gate. For failed setup, use the detailed log and the Discord support link in the app.
+
+## Build and Test
+
+Building requires Apple's Command Line Tools or Xcode. From the repository root:
+
+```sh
+./build.sh
+```
+
+This compiles the GUI and backend with `swiftc` for Apple Silicon and macOS 15, builds and ad-hoc signs `dist/GAMMA Setup Tool.app`, then replaces `~/Applications/GAMMA Setup Tool.app` with that build. No Xcode project or sibling engine checkout is required to build the setup tool.
+
+- `./build.sh run` builds and runs the GUI from `dist/` without installing it.
+- `./build.sh clean` removes `dist/`.
+- `./test.sh` runs Swift unit tests, backend CLI integration tests, and a build smoke test. The smoke test invokes `build.sh`, so it also installs the setup tool into `~/Applications`.
+
+Developers can set `GAMMA_ENGINE_ARTIFACTS_DIR` in the app's environment to prefill the local archive field with the most recently modified `.tar.zst` or `.tar.xz` in that directory. The selected archive still passes the version gate.
+
+### Source Layout
+
+| Path | Responsibility |
+| --- | --- |
+| `sources/GAMMASetupTool/` | SwiftUI wizard, setup state, request construction, and progress display. |
+| `sources/GAMMASetupCore/` | Shared models, engine release resolution, checksum verification, version gate, wrapper pipeline, and USVFS updates. |
+| `sources/GAMMASetupEngine/` | `gamma-setup-engine` CLI backend, called by the GUI through `create-wine-engine`. |
+| `sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py` | Canonical wrapper-creation script, bundled by `build.sh`. |
+| `tests/` | Swift unit tests and shell CLI integration tests. |
+
+`Package.swift` defines both executable products. `build.sh` assembles the distributable app bundle and its backend and resources.

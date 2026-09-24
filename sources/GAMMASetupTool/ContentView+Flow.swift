@@ -6,7 +6,7 @@ struct WrapperNamePage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Name and installation")
+            Text("Name and launch target")
                 .font(.title3)
                 .bold()
 
@@ -19,6 +19,7 @@ struct WrapperNamePage: View {
                         TextField("stalker-gamma", text: $model.appName)
                             .textFieldStyle(.roundedBorder)
                             .focused($appNameIsFocused)
+                            .accessibilityLabel("Application name")
                         if !model.wrapperNameValidationMessage.isEmpty {
                             nameValidationContent
                         }
@@ -35,7 +36,7 @@ struct WrapperNamePage: View {
 
                             if model.outputAppAlreadyExists {
                                 Spacer(minLength: 8)
-                                Button("Show Existing App", action: model.showExistingApp)
+                                Button("Show existing app", action: model.showExistingApp)
                                     .controlSize(.small)
                             }
                         }
@@ -49,18 +50,10 @@ struct WrapperNamePage: View {
             }
             .frame(maxWidth: Layout.environmentPanelWidth, alignment: .topLeading)
 
-            Text("You'll review the wrapper settings on the next step. They can be changed later using the Configure application.")
+            Text("Creates a wrapper for your existing installation. It does not install G.A.M.M.A. After setup, use the Configurator to change game settings and launch arguments.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-
-            if model.wrapperNameIsValid
-                && model.selectedModOrganizerExecutableFound
-                && !model.driveMappingReady {
-                Label("Drive mapping is not valid. Fix it on the next step.", systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.yellow)
-            }
         }
         .frame(maxWidth: Layout.environmentPanelWidth, alignment: .leading)
         .defaultFocus($appNameIsFocused, true)
@@ -86,6 +79,7 @@ struct WrapperNamePage: View {
                 Button(model.selectedModOrganizerExecutableFound ? "Change…" : "Choose…") {
                     model.chooseLaunchExecutable()
                 }
+                .accessibilityLabel("Choose launch executable")
             }
         }
     }

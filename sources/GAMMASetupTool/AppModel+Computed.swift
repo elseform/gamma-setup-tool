@@ -121,10 +121,10 @@ extension AppModel {
 
     var createHeaderTitle: String {
         if installFailed {
-            return "Installation failed"
+            return "Wrapper creation failed"
         }
         if isRunning {
-            return "Installation in progress"
+            return "Creating wrapper"
         }
         return "Review settings"
     }
@@ -134,9 +134,9 @@ extension AppModel {
             return "Check the logs for the failed setup step."
         }
         if isRunning {
-            return statusText.isEmpty ? "Applying changes" : statusText
+            return statusText.isEmpty ? "Preparing wrapper creation" : statusText
         }
-        return "Confirm options"
+        return "Review your choices, then create the wrapper."
     }
 
     var setupSummaryItems: [SetupSummaryItem] {
@@ -153,10 +153,11 @@ extension AppModel {
             rows.append(SetupSummaryItem(label: label, planned: planned))
         }
 
-        add("App", outputAppPath)
+        add("Application", outputAppPath)
         add("Executable", configuration.selectedLaunchExecutablePath)
         add("Engine archive", wineEngineArchivePath.isEmpty ? "Automatic (latest release)" : wineEngineArchivePath)
-        add("Backend", "DXMT")
+        add("Graphics backend", "DXMT")
+        add("Game root (G:)", configuration.optionalGDriveRoot)
         add(SetupOptionCopy.usvfsBinaries, "ModOrganizer folder only; outdated files backed up, then replaced")
         if saveVerboseLog {
             add(SetupOptionCopy.logTitle, SetupOptionCopy.logAction)

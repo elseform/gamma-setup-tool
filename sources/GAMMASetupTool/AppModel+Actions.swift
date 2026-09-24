@@ -52,12 +52,6 @@ extension AppModel {
         }?.path
     }
 
-    func showConfigFile() {
-        guard let settingsURL else { return }
-        AppSettingsStore.ensureSettingsFileExists(at: settingsURL)
-        NSWorkspace.shared.activateFileViewerSelecting([settingsURL])
-    }
-
     // MARK: - Selection
 
     func chooseInstallDirectory() {
@@ -77,7 +71,7 @@ extension AppModel {
     /// unrestricted archive-path prompt).
     func chooseWineEngineArchive() {
         let panel = NSOpenPanel()
-        panel.title = "Select gamma-wine-engine Archive"
+        panel.title = "Choose engine archive"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.canCreateDirectories = false
@@ -95,7 +89,7 @@ extension AppModel {
     /// can skip the network.
     func chooseRedistInstallerDirectory() {
         let panel = NSOpenPanel()
-        panel.title = "Select Folder With Downloaded Installers"
+        panel.title = "Choose downloaded installers folder"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = false
@@ -116,7 +110,7 @@ extension AppModel {
 
     func chooseLaunchExecutable() {
         let panel = NSOpenPanel()
-        panel.title = "Select any Windows Executable"
+        panel.title = "Choose Windows executable"
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.canCreateDirectories = false

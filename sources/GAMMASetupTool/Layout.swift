@@ -46,15 +46,9 @@ enum Layout {
     static let environmentPanelHorizontalPadding: CGFloat = 14
     static let environmentPanelVerticalPadding: CGFloat = 12
     static let setupContentWidth: CGFloat = wizardContentWidth
-    static let setupColumnSpacing: CGFloat = 18
-    static let setupLeftColumnWidth: CGFloat = 360
     static let setupPanelHorizontalPadding: CGFloat = 14
     static let setupPanelVerticalPadding: CGFloat = 12
     static let cardContentSpacing: CGFloat = 8
     static let winetricksPanelVerticalPadding: CGFloat = 12
     static let completeMaxWidth: CGFloat = wizardContentWidth
-
-    static var setupRightColumnWidth: CGFloat {
-        setupContentWidth - setupLeftColumnWidth - setupColumnSpacing
-    }
 }

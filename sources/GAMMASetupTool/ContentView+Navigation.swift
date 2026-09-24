@@ -12,7 +12,7 @@ extension ContentView {
         case .wrapperName:
             return (
                 "Create GAMMA wrapper",
-                "Name the wrapper and select ModOrganizer.exe."
+                "Name the wrapper and choose ModOrganizer.exe or another Windows executable."
             )
 
         case .setup:
@@ -56,7 +56,7 @@ extension ContentView {
         case .wrapperName:
             WrapperNamePage(model: model)
         case .setup:
-            SetupPage(model: model, showWinetricksList: $showWinetricksList)
+            SetupPage(model: model)
         case .create:
             CreatePage(
                 model: model,
@@ -116,23 +116,16 @@ extension ContentView {
         let supportURL = URL(string: "https://discord.com/channels/912320241713958912/1315449108797980762")!
 
         return HStack(spacing: 12) {
-            Link("GitHub", destination: sourceURL)
+            Link("GitHub - elseform", destination: sourceURL)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .help("GitHub repository")
+                .help("Open the GAMMA Setup Tool repository by elseform")
 
             Link("Discord support", destination: supportURL)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .help("Discord support thread")
 
-            Button("Config") {
-                model.showConfigFile()
-            }
-            .buttonStyle(.plain)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .help("Show settings.json in Finder")
         }
     }
 
@@ -164,8 +157,9 @@ extension ContentView {
             Button {
                 continueToNextStep()
             } label: {
-                Label("Confirm selection", systemImage: "arrow.right.circle")
+                Label("Review settings", systemImage: "arrow.right.circle")
             }
+            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(!canContinue)
         case .create:
@@ -175,6 +169,7 @@ extension ContentView {
                 } label: {
                     Label(model.primaryButtonTitle, systemImage: "play.circle")
                 }
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: [.command])
                 .disabled(model.isRunning || !model.setupReady)
             }
@@ -182,13 +177,11 @@ extension ContentView {
             Button {
                 model.showCreatedAppAndQuit()
             } label: {
-                HStack(spacing: 6) {
-                    HazardIcon()
-                    Text("Show .app")
-                }
+                Label("Show in Finder and quit", systemImage: "folder")
             }
+            .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: [.command])
-            .help("Show wrapper in Finder")
+            .help("Reveal the wrapper in Finder and quit GAMMA Setup Tool")
         default:
             EmptyView()
         }

@@ -6,7 +6,6 @@ import GAMMASetupCore
 
 struct SetupPage: View {
     @ObservedObject var model: AppModel
-    @Binding var showWinetricksList: Bool
 
     @State private var showRedistInstallers = false
     @State private var redistInstallerStatuses: [RedistInstallers.Status] = []
@@ -14,48 +13,20 @@ struct SetupPage: View {
     // MARK: - Body
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: Layout.setupColumnSpacing) {
-                setupOptionsCard
-                    .frame(width: Layout.setupLeftColumnWidth, alignment: .topLeading)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    additionalOptionsCard
-                }
-                .frame(width: Layout.setupRightColumnWidth, alignment: .topLeading)
-            }
-            .frame(width: Layout.setupContentWidth, alignment: .topLeading)
-
-            VStack(alignment: .leading, spacing: 12) {
-                setupOptionsCard
-                additionalOptionsCard
-            }
-            .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
-        }
-        .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
-        .disabled(!model.selectedModOrganizerExecutableFound || model.isRunning)
-        .opacity((model.selectedModOrganizerExecutableFound && !model.isRunning) ? 1 : 0.45)
-    }
-
-    // MARK: - App And Prefix
-
-    private var setupOptionsCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            prefixPanel
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private var prefixPanel: some View {
         WizardCard {
-            VStack(alignment: .leading, spacing: Layout.cardContentSpacing) {
+            VStack(alignment: .leading, spacing: 16) {
                 engineArchiveControls
                 Divider()
                 redistInstallerControls
                 Divider()
                 driveMappingControls
+                Divider()
+                Toggle(SetupOptionCopy.saveDetailedLog, isOn: $model.saveVerboseLog)
             }
         }
+        .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
+        .disabled(!model.selectedModOrganizerExecutableFound || model.isRunning)
+        .opacity((model.selectedModOrganizerExecutableFound && !model.isRunning) ? 1 : 0.45)
     }
 
     // gamma-wine-engine ships its own engine build — there is no
@@ -67,16 +38,25 @@ struct SetupPage: View {
         VStack(alignment: .leading, spacing: 6) {
             CardHeading(title: "Engine archive")
             HStack(spacing: 8) {
-                TextField("Automatic (downloads the latest release)", text: $model.wineEngineArchivePath)
+                TextField("Automatic download", text: $model.wineEngineArchivePath)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Engine archive")
                 Button("Choose…") {
                     model.chooseWineEngineArchive()
                 }
+                .accessibilityLabel("Choose engine archive")
             }
+            Text(model.wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                 ? "Downloads the latest engine release automatically. Choose a local .tar.zst or .tar.xz archive to use it instead."
+                 : "Uses this local archive. Setup checks that its engine version is supported.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if !model.wineEngineArchivePath.isEmpty {
-                Text("Using this local archive instead of the latest published release.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button("Use automatic download") {
+                    model.wineEngineArchivePath = ""
+                }
+                .buttonStyle(.link)
             }
         }
     }
@@ -98,7 +78,7 @@ struct SetupPage: View {
                             Text(status.installer.title)
                                 .font(.callout)
                             Text(status.isPresent
-                                 ? "Already downloaded"
+                                 ? "Found locally; verified during setup"
                                  : "Will be downloaded (\(status.installer.sizeLabel))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -114,12 +94,14 @@ struct SetupPage: View {
                     TextField("Optional folder with downloaded installers",
                               text: $model.redistInstallerDirectory)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Downloaded installers folder")
                     Button("Choose…") {
                         model.chooseRedistInstallerDirectory()
                     }
+                    .accessibilityLabel("Choose downloaded installers folder")
                 }
 
-                Text("Each file is verified against the checksum the engine pins, wherever it came from.")
+                Text("Setup verifies every file against the engine’s required checksum. Missing files are downloaded automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -137,42 +119,32 @@ struct SetupPage: View {
 
     // MARK: - Drive Mapping
 
-    // gamma-wine-engine always mounts both Z: (host root) and G: (game
-    // root) unconditionally — there is no mode choice here anymore, unlike
-    // the Sikarugir pipeline's optional G: mapping.
-    @ViewBuilder
     private var driveMappingControls: some View {
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
-            GridRow {
-                Text("Mapping")
-                Text(model.plannedWineDriveMapping)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(.green)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .truncationMode(.middle)
-                    .textSelection(.enabled)
+        VStack(alignment: .leading, spacing: Layout.cardContentSpacing) {
+            CardHeading(title: "Drive mappings")
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 7) {
+                GridRow {
+                    Text("Game root (G:)")
+                        .foregroundStyle(.secondary)
+                    Text(model.configuration.optionalGDriveRoot)
+                        .font(.system(.callout, design: .monospaced))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                GridRow {
+                    Text("Mac root (Z:)")
+                        .foregroundStyle(.secondary)
+                    Text("/")
+                        .font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                }
             }
-        }
+            .font(.callout)
 
-        Text("Mounts the game root into wine as G: (and the host root as Z:, always).")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-
-    // MARK: - Additional Options
-
-    // No runtime-dependency-mode or dxmt-only controls: redist is always
-    // used (see wineEngineRequest()),
-    // and USVFS updates always run with an automatic up-to-date check
-    // instead of a manual toggle (WineEngineSetup.updateUSVFSIfNeeded).
-    private var additionalOptionsCard: some View {
-        WizardCard {
-            VStack(alignment: .leading, spacing: Layout.cardContentSpacing) {
-                CardHeading(title: "Additional options")
-                Toggle(SetupOptionCopy.saveDetailedLog, isOn: $model.saveVerboseLog)
-            }
+            Text("G: uses the parent of the selected executable’s folder. Z: provides access to your Mac’s filesystem. Existing ModOrganizer paths must still point to the correct folders.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

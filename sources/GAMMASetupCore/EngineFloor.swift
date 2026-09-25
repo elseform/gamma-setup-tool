@@ -65,29 +65,51 @@ public struct EngineFloor {
     /// Taking `max` over all three — not just the live value — is what makes
     /// the floor unfalsifiable by going offline: once a machine has seen a
     /// newer release, a later disconnected run still enforces that bar.
+    /// `source` names whichever input the floor actually came from; on a tie
+    /// the live release wins, then the cache.
     static func compute(live: EngineBuildVersion?, cached: EngineBuildVersion?, compiledMinimum: EngineBuildVersion) -> EngineFloor {
-        if let live {
-            let floor = max(live, cached ?? compiledMinimum, compiledMinimum)
-            return EngineFloor(version: floor, source: floor == live ? .liveRelease : .cachedRelease)
+        let candidates: [(version: EngineBuildVersion?, source: Source)] = [
+            (live, .liveRelease),
+            (cached, .cachedRelease),
+            (compiledMinimum, .compiledMinimum),
+        ]
+        var floor = EngineFloor(version: compiledMinimum, source: .compiledMinimum)
+        var found = false
+        for candidate in candidates {
+            guard let version = candidate.version else { continue }
+            if !found || version > floor.version {
+                floor = EngineFloor(version: version, source: candidate.source)
+                found = true
+            }
         }
-        if let cached {
-            let floor = max(cached, compiledMinimum)
-            return EngineFloor(version: floor, source: floor == cached ? .cachedRelease : .compiledMinimum)
-        }
-        return EngineFloor(version: compiledMinimum, source: .compiledMinimum)
+        return floor
     }
 
-    /// Resolves against GitHub, caching a fresh result and falling back to
-    /// whatever is cached (or the compiled minimum) when that fails.
+    /// Resolves against GitHub, falling back to whatever is cached (or the
+    /// compiled minimum) when that fails.
     public static func resolve(
         cacheDirectory: URL,
         fetchNewest: @escaping EngineReleaseResolver.Transport = EngineReleaseResolver.urlSessionTransport
     ) async -> EngineFloor {
-        let cached = readCache(cacheDirectory: cacheDirectory)
         let live = try? await EngineReleaseResolver.fetchNewest(transport: fetchNewest)
-        if let live {
-            writeCache(CachedEngineRelease(version: live.version), cacheDirectory: cacheDirectory)
+        return resolve(cacheDirectory: cacheDirectory, live: live?.version)
+    }
+
+    /// Same, for a caller that already fetched the newest release — so a run
+    /// that downloads it does not ask GitHub twice. The cache only ever moves
+    /// up: a live answer older than what this machine already saw (a release
+    /// taken down, say) never lowers the floor a later offline run enforces.
+    /// A substitute release listing (see `EngineReleaseResolver.releasesURL`)
+    /// still sets this run's floor but is never cached.
+    public static func resolve(
+        cacheDirectory: URL,
+        live: EngineBuildVersion?,
+        recordsLiveRelease: Bool = EngineReleaseResolver.isUsingDefaultReleasesURL
+    ) -> EngineFloor {
+        let cached = readCache(cacheDirectory: cacheDirectory)?.version
+        if recordsLiveRelease, let live, cached.map({ live > $0 }) ?? true {
+            writeCache(CachedEngineRelease(version: live), cacheDirectory: cacheDirectory)
         }
-        return compute(live: live?.version, cached: cached?.version, compiledMinimum: compiledMinimum)
+        return compute(live: live, cached: cached, compiledMinimum: compiledMinimum)
     }
 }

@@ -85,6 +85,13 @@ public enum EngineReleaseResolver {
         return defaultReleasesURL
     }
 
+    /// False while `GAMMA_ENGINE_RELEASES_URL` points somewhere else. A
+    /// substitute listing is not the real release history, so it must not
+    /// raise this machine's cached version floor.
+    public static var isUsingDefaultReleasesURL: Bool {
+        releasesURL == defaultReleasesURL
+    }
+
     public static func urlSessionTransport(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")

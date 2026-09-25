@@ -17,11 +17,14 @@ INTERMEDIATE_ENGINE_BINARY="$INTERMEDIATES_DIR/gamma-setup-engine"
 MODULE_CACHE_DIR="$BUILD_DIR/module-cache"
 MODE="${1:-build}"
 
+# build:  build dist/, sign it, and install it into ~/Applications
+# bundle: build and sign dist/ only (what test.sh uses; installs nothing)
+# run:    build dist/ and run the app binary directly
 case "$MODE" in
-  build|run|clean)
+  build|bundle|run|clean)
     ;;
   *)
-    printf 'Usage: %s [build|run|clean]\n' "$(basename "$0")" >&2
+    printf 'Usage: %s [build|bundle|run|clean]\n' "$(basename "$0")" >&2
     exit 2
     ;;
 esac
@@ -54,7 +57,7 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE_DIR" "$INTERMEDIATES_DIR"
 
 swiftc \
   -parse-as-library \
-  -Onone \
+  -O \
   -target arm64-apple-macosx15.0 \
   -module-cache-path "$MODULE_CACHE_DIR" \
   -framework SwiftUI \
@@ -65,7 +68,7 @@ swiftc \
 
 cp "$INTERMEDIATE_BINARY" "$BINARY"
 
-if [[ "$MODE" == "build" ]] || is_stale "$INTERMEDIATE_ENGINE_BINARY" "$ROOT_DIR"/sources/GAMMASetupCore/*.swift "$ROOT_DIR"/sources/GAMMASetupEngine/main.swift; then
+if [[ "$MODE" != "run" ]] || is_stale "$INTERMEDIATE_ENGINE_BINARY" "$ROOT_DIR"/sources/GAMMASetupCore/*.swift "$ROOT_DIR"/sources/GAMMASetupEngine/main.swift; then
   swiftc \
     -O \
     -target arm64-apple-macosx15.0 \
@@ -128,8 +131,11 @@ perl -0pi -e "s/APP_VERSION_PLACEHOLDER/$APP_VERSION/g" "$CONTENTS_DIR/Info.plis
 
 INSTALL_DIR="$HOME/Applications"
 
-if [[ "$MODE" == "build" ]]; then
+if [[ "$MODE" == "build" || "$MODE" == "bundle" ]]; then
   codesign --force --deep --sign - "$APP_DIR"
+fi
+
+if [[ "$MODE" == "build" ]]; then
   mkdir -p "$INSTALL_DIR"
   rm -rf "$INSTALL_DIR/GAMMA Setup Tool.app"
   cp -R "$APP_DIR" "$INSTALL_DIR/GAMMA Setup Tool.app"

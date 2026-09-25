@@ -247,6 +247,21 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
         # and nothing downstream should ever see them as real engine content.
         if Path(parts[1]).name.startswith("._"):
             continue
+        # filter="tar" below guards against path traversal only on Python
+        # 3.12+, and /usr/bin/python3 is older, so the same rules are checked
+        # here for every version: relative paths inside the engine only, and
+        # symlinks that resolve inside it. Hard links are refused — their
+        # link names keep the stripped top-level folder, so they could not
+        # be extracted correctly anyway.
+        relative = Path(parts[1])
+        if relative.is_absolute() or ".." in relative.parts:
+            raise SetupError(f"unsafe path in engine archive: {member.name}")
+        if member.islnk():
+            raise SetupError(f"unexpected hard link in engine archive: {member.name}")
+        if member.issym():
+            resolved = os.path.normpath(os.path.join(str(relative.parent), member.linkname))
+            if os.path.isabs(member.linkname) or resolved == ".." or resolved.startswith("../"):
+                raise SetupError(f"symlink escapes the engine folder: {member.name} -> {member.linkname}")
         member.name = parts[1]
         # filter= (PEP 706) only exists on Python 3.12+; resolvePython3()
         # (WineEngineSetup.swift) prefers /usr/bin/python3, which on

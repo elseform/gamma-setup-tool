@@ -41,6 +41,6 @@ printf '\n==> Running Swift setup engine CLI tests\n'
 bash "$ROOT_DIR/tests/shell/gamma_setup_engine_tests.sh" "$ROOT_DIR" "$BUILD_DIR/gamma-setup-engine"
 
 printf '\n==> Running build smoke test\n'
-"$ROOT_DIR/build.sh" >/dev/null
+"$ROOT_DIR/build.sh" bundle >/dev/null
 
 printf '\nAll tests passed.\n'

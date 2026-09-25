@@ -195,45 +195,46 @@ public final class WineEngineSetup {
         )
     }
 
-    /// Resolves the archive to install, then gates it. A local override
-    /// (`request.archivePath`) is used as given but still gated — an older
-    /// local build is refused outright, with no UI bypass; bisecting is done
-    /// with `interactive_setup.py` directly. With no override, the newest
-    /// published `gamma-wine-engine` release is resolved and downloaded.
+    /// Resolves the archive to install and gates it before anything is
+    /// downloaded or installed. A local override (`request.archivePath`) is
+    /// used as given but still gated — an older local build is refused
+    /// outright, with no UI bypass; bisecting is done with
+    /// `interactive_setup.py` directly. With no override, the newest
+    /// published `gamma-wine-engine` release is resolved, gated on its
+    /// sidecar manifest, and only then downloaded.
     private func resolveArchive(request: WineEngineSetupRequest, cacheDir: URL) async throws -> URL {
-        let archiveURL: URL
-        let archiveName: String?
-        let manifest: EngineManifest
-
         if let archivePath = request.archivePath, !archivePath.isEmpty {
             let url = URL(fileURLWithPath: (archivePath as NSString).expandingTildeInPath)
             guard fileManager.fileExists(atPath: url.path) else {
                 throw WineEngineSetupError.message("engine archive not found: \(url.path)")
             }
-            archiveURL = url
-            archiveName = url.lastPathComponent
-            manifest = try EngineArchiveProbe.readManifest(archiveURL: url)
-        } else {
-            let release: ResolvedEngineRelease
-            do {
-                release = try await EngineReleaseResolver.fetchNewest()
-            } catch {
-                throw WineEngineSetupError.message(
-                    "no local engine archive selected and could not resolve a published release: \(error.localizedDescription)"
-                )
-            }
-            // Fail before a 130 MB download that interactive_setup.py could
-            // not unpack anyway.
-            if ZstdLocator.isRequired(forArchiveNamed: release.archiveName), ZstdLocator.locate() == nil {
-                throw WineEngineSetupError.message("cannot install \(release.archiveName): \(ZstdLocator.installHint)")
-            }
-            manifest = try await fetchReleaseManifest(release.manifestURL)
-            let downloader = EngineArchiveDownloader(cacheDirectory: cacheDir, reporter: reporter)
-            archiveURL = try await downloader.fetch(release: release, manifest: manifest)
-            archiveName = release.archiveName
+            let manifest = try EngineArchiveProbe.readManifest(archiveURL: url)
+            let floor = await EngineFloor.resolve(cacheDirectory: cacheDir)
+            try gate(manifest: manifest, archiveName: url.lastPathComponent, floor: floor)
+            return url
         }
 
-        let floor = await EngineFloor.resolve(cacheDirectory: cacheDir)
+        let release: ResolvedEngineRelease
+        do {
+            release = try await EngineReleaseResolver.fetchNewest()
+        } catch {
+            throw WineEngineSetupError.message(
+                "no local engine archive selected and could not resolve a published release: \(error.localizedDescription)"
+            )
+        }
+        // Fail before a 130 MB download that interactive_setup.py could
+        // not unpack anyway.
+        if ZstdLocator.isRequired(forArchiveNamed: release.archiveName), ZstdLocator.locate() == nil {
+            throw WineEngineSetupError.message("cannot install \(release.archiveName): \(ZstdLocator.installHint)")
+        }
+        let manifest = try await fetchReleaseManifest(release.manifestURL)
+        let floor = EngineFloor.resolve(cacheDirectory: cacheDir, live: release.version)
+        try gate(manifest: manifest, archiveName: release.archiveName, floor: floor)
+        let downloader = EngineArchiveDownloader(cacheDirectory: cacheDir, reporter: reporter)
+        return try await downloader.fetch(release: release, manifest: manifest)
+    }
+
+    private func gate(manifest: EngineManifest, archiveName: String, floor: EngineFloor) throws {
         switch EngineArchiveGate.evaluate(
             manifest: manifest,
             archiveName: archiveName,
@@ -242,7 +243,6 @@ public final class WineEngineSetup {
         ) {
         case .accept(let version):
             reporter.log("Engine version: \(version)")
-            return archiveURL
         case .refuse(let refusal):
             throw WineEngineSetupError.message(refusal.description)
         }

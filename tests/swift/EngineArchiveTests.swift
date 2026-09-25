@@ -156,6 +156,33 @@ final class EngineArchiveTests {
         let ancient = EngineBuildVersion(crossover: [0], wineMajor: 0, gamma: 0, build: 0)
         let floor = EngineFloor.compute(live: nil, cached: ancient, compiledMinimum: v1)
         XCTAssertEqual(floor.version, v1)
+        XCTAssertEqual(floor.source, .compiledMinimum)
+    }
+
+    /// Regression: a live release below the compiled minimum used to be
+    /// reported as the cached release in the refusal message.
+    func testFloorNamesTheCompiledMinimumWhenItOutranksTheLiveRelease() {
+        let floor = EngineFloor.compute(live: v1, cached: nil, compiledMinimum: v10)
+        XCTAssertEqual(floor.version, v10)
+        XCTAssertEqual(floor.source, .compiledMinimum)
+    }
+
+    func testFloorCacheOnlyEverMovesUp() throws {
+        let cache = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gamma-floor-tests-\(UUID().uuidString)")
+        _ = EngineFloor.resolve(cacheDirectory: cache, live: v14, recordsLiveRelease: true)
+        _ = EngineFloor.resolve(cacheDirectory: cache, live: v10, recordsLiveRelease: true)
+        let offline = EngineFloor.resolve(cacheDirectory: cache, live: nil, recordsLiveRelease: true)
+        XCTAssertEqual(offline.version, v14)
+        XCTAssertEqual(offline.source, .cachedRelease)
+    }
+
+    func testFloorFromASubstituteListingIsNotCached() {
+        let cache = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gamma-floor-tests-\(UUID().uuidString)")
+        let online = EngineFloor.resolve(cacheDirectory: cache, live: v14, recordsLiveRelease: false)
+        XCTAssertEqual(online.version, v14)
+        XCTAssertNil(EngineFloor.readCache(cacheDirectory: cache))
     }
 
     /// Regression: an earlier draft built the compiled minimum from an

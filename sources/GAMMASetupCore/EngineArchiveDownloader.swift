@@ -61,19 +61,17 @@ public final class EngineArchiveDownloader: NSObject {
     private func download(url: URL) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             let delegate = DownloadDelegate(reporter: reporter, continuation: continuation)
+            // The session keeps its delegate alive until it is invalidated;
+            // finishTasksAndInvalidate() releases both once the task is done.
             let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-            let task = session.downloadTask(with: url)
-            // Keep the delegate alive for the task's lifetime.
-            objc_setAssociatedObject(task, &Self.delegateKey, delegate, .OBJC_ASSOCIATION_RETAIN)
-            task.resume()
+            session.downloadTask(with: url).resume()
+            session.finishTasksAndInvalidate()
         }
     }
 
-    private static var delegateKey: UInt8 = 0
-
     private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         let reporter: JSONEventReporter
-        let continuation: CheckedContinuation<URL, Error>
+        private var continuation: CheckedContinuation<URL, Error>?
         private var lastReportedPercent = -1
         private var lastReportedAt = Date.distantPast
 
@@ -82,11 +80,26 @@ public final class EngineArchiveDownloader: NSObject {
             self.continuation = continuation
         }
 
+        /// Delegate callbacks arrive on the session's serial queue; this
+        /// makes sure the continuation is resumed exactly once.
+        private func resume(with result: Result<URL, Error>) {
+            continuation?.resume(with: result)
+            continuation = nil
+        }
+
         func urlSession(
             _ session: URLSession,
             downloadTask: URLSessionDownloadTask,
             didFinishDownloadingTo location: URL
         ) {
+            // A 404 or rate-limit page still "finishes downloading"; report
+            // the HTTP status instead of a misleading checksum mismatch.
+            if let http = downloadTask.response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                resume(with: .failure(WineEngineSetupError.message(
+                    "could not download \(downloadTask.originalRequest?.url?.lastPathComponent ?? "engine archive"): HTTP \(http.statusCode)"
+                )))
+                return
+            }
             // URLSession deletes the temp file as soon as this method returns,
             // so the move to a stable temp location must happen synchronously
             // here, not after hopping back to the caller.
@@ -94,9 +107,9 @@ public final class EngineArchiveDownloader: NSObject {
                 .appendingPathComponent("gamma-engine-download-\(UUID().uuidString).tmp")
             do {
                 try FileManager.default.moveItem(at: location, to: stableTemp)
-                continuation.resume(returning: stableTemp)
+                resume(with: .success(stableTemp))
             } catch {
-                continuation.resume(throwing: error)
+                resume(with: .failure(error))
             }
         }
 
@@ -120,7 +133,10 @@ public final class EngineArchiveDownloader: NSObject {
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
             if let error {
-                continuation.resume(throwing: error)
+                resume(with: .failure(error))
+            } else {
+                // Normally already resumed by didFinishDownloadingTo.
+                resume(with: .failure(WineEngineSetupError.message("engine archive download ended without a file")))
             }
         }
     }

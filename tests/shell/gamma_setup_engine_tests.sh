@@ -14,6 +14,10 @@ ENGINE="${2:?engine binary is required}"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/gamma-setup-engine-cli.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
+# Never reach GitHub: with a real release published, release resolution would
+# download a 130 MB engine. Port 9 (discard) on loopback refuses immediately.
+export GAMMA_ENGINE_RELEASES_URL="http://127.0.0.1:9/releases"
+
 fail() {
   printf 'not ok - %s\n' "$1" >&2
   exit 1
@@ -42,9 +46,8 @@ expect_failure() {
 # A minimal but valid engine archive: just enough for EngineArchiveProbe and
 # EngineArchiveGate to accept it (a parseable versionLabel and a build number
 # high enough to clear any floor), so tests past archive resolution can rely
-# on it existing rather than being empty. The tar/zstd extension doesn't need
-# real compression — tar/libarchive detect the format from content, not the
-# name — so a plain tar is enough and needs no zstd binary.
+# on it existing rather than being empty. The archive is really compressed in
+# the format its name claims: .tar.xz with tar itself, .tar.zst with zstd.
 write_archive_fixture() {
   local path="$1"
   local staging
@@ -53,7 +56,11 @@ write_archive_fixture() {
   cat >"$staging/wswine.bundle/engine-manifest.json" <<'JSON'
 {"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":999999}
 JSON
-  (cd "$staging" && tar -cf "$path" wswine.bundle)
+  case "$path" in
+    *.tar.xz) (cd "$staging" && tar -cJf "$path" wswine.bundle) ;;
+    *.tar.zst) (cd "$staging" && tar -cf - wswine.bundle | zstd -q -o "$path") ;;
+    *) fail "unsupported fixture name: $path" ;;
+  esac
 }
 
 # A request whose only interesting property is which field is missing.
@@ -124,8 +131,8 @@ assert_contains "$TMP_ROOT/bad.err" "error:"
 printf '==> CLI falls back to release resolution with no local archive given\n'
 # An empty archivePath is not itself an error any more — WineEngineSetup then
 # tries to resolve the newest published gamma-wine-engine release. That fails
-# here (no real GitHub release exists yet, or no network in this sandbox), but
-# the failure comes from EngineReleaseResolver, not a bare "missing archive"
+# here because GAMMA_ENGINE_RELEASES_URL points at a closed port, and the
+# failure comes from EngineReleaseResolver, not a bare "missing archive"
 # refusal.
 write_request "$TMP_ROOT/no-archive.json" "" ""
 expect_failure "no archive source" "$TMP_ROOT/no-archive.out" "$TMP_ROOT/no-archive.err" \
@@ -142,16 +149,29 @@ printf '==> Archive resolution runs before launch-target resolution\n'
 # A present and valid archive gets past resolveArchive (including its
 # manifest probe and version gate), so the next failure proves the ordering
 # inside WineEngineSetup.create() without ever reaching interactive_setup.py.
-write_archive_fixture "$TMP_ROOT/present.tar.zst"
-write_request "$TMP_ROOT/no-mo2.json" "$TMP_ROOT/present.tar.zst" ""
+write_archive_fixture "$TMP_ROOT/present.tar.xz"
+write_request "$TMP_ROOT/no-mo2.json" "$TMP_ROOT/present.tar.xz" ""
 expect_failure "no launch target" "$TMP_ROOT/no-mo2.out" "$TMP_ROOT/no-mo2.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/no-mo2.json"
 assert_contains "$TMP_ROOT/no-mo2.err" "mo2Path is required when exeRelPath is not explicitly overridden"
 
+if command -v zstd >/dev/null 2>&1; then
+  printf '==> A .tar.zst archive is readable with a Finder-like PATH\n'
+  # A Finder-launched app has no Homebrew directory on PATH, and /usr/bin/tar
+  # can only decode zstd through an external zstd binary.
+  write_archive_fixture "$TMP_ROOT/present.tar.zst"
+  write_request "$TMP_ROOT/zst.json" "$TMP_ROOT/present.tar.zst" ""
+  if PATH=/usr/bin:/bin:/usr/sbin:/sbin "$ENGINE" create-wine-engine --request-file "$TMP_ROOT/zst.json" \
+      >"$TMP_ROOT/zst.out" 2>"$TMP_ROOT/zst.err"; then
+    fail "zst archive: expected a non-zero exit"
+  fi
+  assert_contains "$TMP_ROOT/zst.err" "mo2Path is required when exeRelPath is not explicitly overridden"
+fi
+
 printf '==> CLI rejects an mo2Path outside gammaRoot\n'
 mkdir -p "$TMP_ROOT/elsewhere"
 touch "$TMP_ROOT/elsewhere/ModOrganizer.exe"
-write_request "$TMP_ROOT/outside.json" "$TMP_ROOT/present.tar.zst" "$TMP_ROOT/elsewhere/ModOrganizer.exe"
+write_request "$TMP_ROOT/outside.json" "$TMP_ROOT/present.tar.xz" "$TMP_ROOT/elsewhere/ModOrganizer.exe"
 expect_failure "mo2 outside gammaRoot" "$TMP_ROOT/outside.out" "$TMP_ROOT/outside.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/outside.json"
 assert_contains "$TMP_ROOT/outside.err" "is not inside gammaRoot"

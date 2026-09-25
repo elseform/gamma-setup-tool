@@ -201,6 +201,11 @@ public final class WineEngineSetup {
                     "no local engine archive selected and could not resolve a published release: \(error.localizedDescription)"
                 )
             }
+            // Fail before a 130 MB download that interactive_setup.py could
+            // not unpack anyway.
+            if ZstdLocator.isRequired(forArchiveNamed: release.archiveName), ZstdLocator.locate() == nil {
+                throw WineEngineSetupError.message("cannot install \(release.archiveName): \(ZstdLocator.installHint)")
+            }
             manifest = try await fetchReleaseManifest(release.manifestURL)
             let downloader = EngineArchiveDownloader(cacheDirectory: cacheDir, reporter: reporter)
             archiveURL = try await downloader.fetch(release: release, manifest: manifest)

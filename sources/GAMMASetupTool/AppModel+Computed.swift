@@ -82,6 +82,16 @@ extension AppModel {
             && driveMappingReady
             && wrapperNameIsValid
             && selectedLaunchExecutableFound
+            && !zstdMissing
+    }
+
+    /// Published releases and most local builds are `.tar.zst`, which neither
+    /// setup step can unpack without Homebrew's `zstd`. Only a local `.tar.xz`
+    /// works without it.
+    var zstdMissing: Bool {
+        let archive = wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needsZstd = archive.isEmpty || ZstdLocator.isRequired(forArchiveNamed: archive)
+        return needsZstd && ZstdLocator.locate() == nil
     }
 
     var selectedModOrganizerExecutableFound: Bool {

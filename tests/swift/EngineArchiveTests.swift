@@ -304,19 +304,66 @@ final class EngineArchiveTests {
         XCTAssertThrows(try EngineReleaseResolver.newestEngineRelease(in: [GitHubRelease(tagName: "v0.86", assets: [])]))
     }
 
-    // MARK: - EngineArchiveProbe (only if a real archive is present)
+    // MARK: - EngineArchiveProbe
 
-    func testProbeReadsTheManifestFromARealLocalArchiveWhenOneExists() throws {
-        let candidates = [
-            "~/projects/2_2_gamma/gamma-wine-engine/dist/artifacts",
-        ].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-        guard let dir = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
-              let entries = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil),
-              let archive = entries.first(where: { $0.lastPathComponent.hasSuffix(".tar.zst") }) else {
-            return // no local engine checkout on this machine; nothing to probe
+    /// Builds `wswine.bundle/engine-manifest.json` into a real archive of the
+    /// requested kind, so the probe is exercised against actual compression.
+    private func makeArchive(named name: String) throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("engine-probe-\(UUID().uuidString)")
+        let bundle = root.appendingPathComponent("wswine.bundle")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
+        try Data(#"{"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":15}"#.utf8)
+            .write(to: bundle.appendingPathComponent("engine-manifest.json"))
+        let archive = root.appendingPathComponent(name)
+        let tar = root.appendingPathComponent("plain.tar")
+        try runTool("/usr/bin/tar", ["-cf", tar.path, "-C", root.path, "wswine.bundle"])
+        if name.hasSuffix(".tar.xz") {
+            try runTool("/usr/bin/tar", ["-cJf", archive.path, "-C", root.path, "wswine.bundle"])
+        } else if let zstd = ZstdLocator.locate() {
+            try runTool(zstd.path, ["-q", "-f", tar.path, "-o", archive.path])
+        } else {
+            throw TestFailure(description: "zstd not installed")
         }
+        return archive
+    }
+
+    private func runTool(_ path: String, _ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw TestFailure(description: "\(path) \(arguments) exited \(process.terminationStatus)")
+        }
+    }
+
+    func testProbeReadsATarXzArchive() throws {
+        let manifest = try EngineArchiveProbe.readManifest(archiveURL: try makeArchive(named: "CX26W11-GAMMA-DXMT-15.tar.xz"))
+        XCTAssertEqual(manifest.buildNumber, 15)
+    }
+
+    /// A Finder-launched app has no Homebrew directory on PATH; the probe must
+    /// still find zstd for bsdtar.
+    func testProbeReadsATarZstArchiveWithAFinderLikePath() throws {
+        guard ZstdLocator.locate() != nil else { return } // zstd not installed here
+        let archive = try makeArchive(named: "CX26W11-GAMMA-DXMT-15.tar.zst")
+        let savedPath = ProcessInfo.processInfo.environment["PATH"]
+        setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin", 1)
+        defer { if let savedPath { setenv("PATH", savedPath, 1) } }
         let manifest = try EngineArchiveProbe.readManifest(archiveURL: archive)
-        XCTAssertTrue(manifest.schemaVersion >= 1)
+        XCTAssertEqual(manifest.buildNumber, 15)
+    }
+
+    func testProbeRefusesAZstArchiveClearlyWhenZstdIsMissing() {
+        let archive = URL(fileURLWithPath: "/nonexistent/CX26W11-GAMMA-DXMT-15.tar.zst")
+        do {
+            _ = try EngineArchiveProbe.readManifest(archiveURL: archive, zstd: nil)
+            recordFailure("expected a refusal", file: #file, line: #line)
+        } catch {
+            XCTAssertContains(error.localizedDescription, "brew install zstd")
+        }
     }
 
     // MARK: - Tool version stays in step with build.sh

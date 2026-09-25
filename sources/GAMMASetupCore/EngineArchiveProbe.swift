@@ -2,14 +2,31 @@ import Foundation
 
 /// Reads `wswine.bundle/engine-manifest.json` out of a packed engine archive
 /// without extracting it. `/usr/bin/tar -xOf` streams a single member straight
-/// out of a `.tar.zst`/`.tar.xz` (`tar` decompresses through `libarchive`, no
-/// separate `zstd` binary needed) in well under a second on a 130 MB archive —
-/// much cheaper than unpacking to probe.
+/// out of the archive in well under a second on a 130 MB archive — much
+/// cheaper than unpacking to probe. `.tar.xz` is decoded by `tar` itself;
+/// `.tar.zst` is not (see `ZstdLocator`), so the located `zstd` binary's
+/// directory is put on `tar`'s `PATH` for that case.
 public enum EngineArchiveProbe {
-    public static func readManifest(archiveURL: URL, tarPath: String = "/usr/bin/tar") throws -> EngineManifest {
+    public static func readManifest(
+        archiveURL: URL,
+        tarPath: String = "/usr/bin/tar",
+        zstd: URL? = ZstdLocator.locate()
+    ) throws -> EngineManifest {
+        var environment = ProcessInfo.processInfo.environment
+        if ZstdLocator.isRequired(forArchiveNamed: archiveURL.lastPathComponent) {
+            guard let zstd else {
+                throw WineEngineSetupError.message(
+                    "cannot read \(archiveURL.lastPathComponent): \(ZstdLocator.installHint)"
+                )
+            }
+            let zstdDirectory = zstd.deletingLastPathComponent().path
+            environment["PATH"] = [zstdDirectory, environment["PATH"] ?? "/usr/bin:/bin"].joined(separator: ":")
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tarPath)
         process.arguments = ["-xOf", archiveURL.path, "wswine.bundle/engine-manifest.json"]
+        process.environment = environment
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

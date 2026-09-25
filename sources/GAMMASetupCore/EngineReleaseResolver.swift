@@ -72,7 +72,18 @@ public enum EngineReleaseResolverError: Error, CustomStringConvertible, Localize
 public enum EngineReleaseResolver {
     public typealias Transport = (URL) async throws -> Data
 
-    public static let releasesURL = URL(string: "https://api.github.com/repos/elseform/gamma-wine-engine/releases?per_page=30")!
+    public static let defaultReleasesURL = URL(string: "https://api.github.com/repos/elseform/gamma-wine-engine/releases?per_page=30")!
+
+    /// `GAMMA_ENGINE_RELEASES_URL` replaces the GitHub listing URL. The CLI
+    /// tests point it at an unreachable address so they never download a real
+    /// engine; it is not a user-facing setting.
+    public static var releasesURL: URL {
+        if let override = ProcessInfo.processInfo.environment["GAMMA_ENGINE_RELEASES_URL"],
+           let url = URL(string: override) {
+            return url
+        }
+        return defaultReleasesURL
+    }
 
     public static func urlSessionTransport(_ url: URL) async throws -> Data {
         var request = URLRequest(url: url)

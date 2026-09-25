@@ -825,10 +825,17 @@ def run_setup(args: argparse.Namespace) -> None:
     state_file = app_support / "configurator-state.json"
 
     # Everything this script writes from here on lives under app_path or
-    # app_support (engine, prefix, launcher, Configurator.app copy) — both
-    # are guaranteed fresh (app_path's existence was already checked above),
-    # so on failure main()'s cleanup can safely remove them wholesale.
-    _cleanup_paths.extend([app_path, app_support])
+    # app_support (engine, prefix, launcher, Configurator.app copy). app_path
+    # is guaranteed fresh (its existence was checked above), so a failure can
+    # remove it wholesale. app_support is not: it survives deleting the .app,
+    # and an earlier wrapper of the same name may have left its prefix and
+    # app.env there. Only remove what this run created, never a pre-existing
+    # prefix or settings file.
+    _cleanup_paths.append(app_path)
+    if not app_support.exists():
+        _cleanup_paths.append(app_support)
+    elif not wineprefix.exists():
+        _cleanup_paths.append(wineprefix)
 
     log("")
     log(f"  Engine archive: {artifact_path}")

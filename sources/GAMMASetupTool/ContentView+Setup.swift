@@ -52,6 +52,12 @@ struct SetupPage: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if model.zstdMissing {
+                Label(ZstdLocator.installHint, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !model.wineEngineArchivePath.isEmpty {
                 Button("Use automatic download") {
                     model.wineEngineArchivePath = ""

@@ -43,24 +43,14 @@ expect_failure() {
   fi
 }
 
-# A minimal but valid engine archive: just enough for EngineArchiveProbe and
-# EngineArchiveGate to accept it (a parseable versionLabel and a build number
-# high enough to clear any floor), so tests past archive resolution can rely
-# on it existing rather than being empty. The archive is really compressed in
-# the format its name claims: .tar.xz with tar itself, .tar.zst with zstd.
+# A local engine archive is used as given, so tests past archive resolution
+# only need the file to exist; interactive_setup.py is never reached.
 write_archive_fixture() {
   local path="$1"
   local staging
   staging="$(mktemp -d "$TMP_ROOT/fixture.XXXXXX")"
   mkdir -p "$staging/wswine.bundle"
-  cat >"$staging/wswine.bundle/engine-manifest.json" <<'JSON'
-{"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":999999}
-JSON
-  case "$path" in
-    *.tar.xz) (cd "$staging" && tar -cJf "$path" wswine.bundle) ;;
-    *.tar.zst) (cd "$staging" && tar -cf - wswine.bundle | zstd -q -o "$path") ;;
-    *) fail "unsupported fixture name: $path" ;;
-  esac
+  (cd "$staging" && tar -cJf "$path" wswine.bundle)
 }
 
 # A request whose only interesting property is which field is missing.
@@ -143,27 +133,14 @@ expect_failure "ghost archive" "$TMP_ROOT/ghost.out" "$TMP_ROOT/ghost.err" \
 assert_contains "$TMP_ROOT/ghost.err" "engine archive not found:"
 
 printf '==> Archive resolution runs before launch-target resolution\n'
-# A present and valid archive gets past resolveArchive (including its
-# manifest probe and version gate), so the next failure proves the ordering
-# inside WineEngineSetup.create() without ever reaching interactive_setup.py.
+# A present archive gets past resolveArchive, so the next failure proves the
+# ordering inside WineEngineSetup.create() without ever reaching
+# interactive_setup.py.
 write_archive_fixture "$TMP_ROOT/present.tar.xz"
 write_request "$TMP_ROOT/no-mo2.json" "$TMP_ROOT/present.tar.xz" ""
 expect_failure "no launch target" "$TMP_ROOT/no-mo2.out" "$TMP_ROOT/no-mo2.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/no-mo2.json"
 assert_contains "$TMP_ROOT/no-mo2.err" "mo2Path is required when exeRelPath is not explicitly overridden"
-
-if command -v zstd >/dev/null 2>&1; then
-  printf '==> A .tar.zst archive is readable with a Finder-like PATH\n'
-  # A Finder-launched app has no Homebrew directory on PATH, and /usr/bin/tar
-  # can only decode zstd through an external zstd binary.
-  write_archive_fixture "$TMP_ROOT/present.tar.zst"
-  write_request "$TMP_ROOT/zst.json" "$TMP_ROOT/present.tar.zst" ""
-  if PATH=/usr/bin:/bin:/usr/sbin:/sbin "$ENGINE" create-wine-engine --request-file "$TMP_ROOT/zst.json" \
-      >"$TMP_ROOT/zst.out" 2>"$TMP_ROOT/zst.err"; then
-    fail "zst archive: expected a non-zero exit"
-  fi
-  assert_contains "$TMP_ROOT/zst.err" "mo2Path is required when exeRelPath is not explicitly overridden"
-fi
 
 printf '==> CLI rejects an mo2Path outside gammaRoot\n'
 mkdir -p "$TMP_ROOT/elsewhere"

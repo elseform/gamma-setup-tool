@@ -1,10 +1,8 @@
 import Foundation
 
-/// Covers the Phase 4 version gate: EngineBuildVersion ordering,
-/// EngineVersionParser, EngineManifest decoding, EngineFloor's pure
-/// computation, EngineArchiveGate, and EngineReleaseResolver's pure release
-/// selection. All synchronous and offline — no network, no archive
-/// extraction beyond an optional local one already on disk.
+/// Covers picking the newest published release (EngineBuildVersion ordering,
+/// EngineVersionParser, EngineReleaseResolver) and reading the checksum out of
+/// its manifest. All synchronous and offline.
 final class EngineArchiveTests {
     // MARK: - EngineBuildVersion
 
@@ -24,19 +22,6 @@ final class EngineArchiveTests {
         XCTAssertTrue(short == long)
         XCTAssertFalse(short < long)
         XCTAssertFalse(long < short)
-    }
-
-    /// The case a synthesised Equatable would get wrong: two builds with the
-    /// same ordering fields but different family/label must still be equal
-    /// and neither less than the other, or sorted()/max() silently corrupts.
-    func testEqualityIgnoresFamilyAndLabelByDesign() {
-        let a = EngineBuildVersion(crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 14, family: "GAMMA-DXMT", label: "CX26.3.0-W11-Gamma087")
-        let b = EngineBuildVersion(crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 14, family: nil, label: nil)
-        XCTAssertTrue(a == b)
-        XCTAssertFalse(a < b)
-        XCTAssertFalse(b < a)
-        let sorted = [a, b].sorted()
-        XCTAssertEqual(sorted.count, 2)
     }
 
     // MARK: - EngineVersionParser
@@ -69,34 +54,7 @@ final class EngineArchiveTests {
         XCTAssertNil(EngineVersionParser.parseBuildCounter(fromName: "no-dash-here"))
     }
 
-    func testVersionPrefersManifestBuildNumberOverName() throws {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 99)
-        let version = try EngineVersionParser.version(manifest: manifest, name: "CX26W11-GAMMA-DXMT-14.tar.zst")
-        XCTAssertEqual(version.build, 99)
-    }
-
-    func testVersionFallsBackToNameWhenNoBuildNumber() throws {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087")
-        let version = try EngineVersionParser.version(manifest: manifest, name: "CX26W11-GAMMA-DXMT-14.tar.zst")
-        XCTAssertEqual(version.build, 14)
-    }
-
-    func testVersionRefusesRatherThanGuessingBuildZero() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087")
-        XCTAssertThrows(try EngineVersionParser.version(manifest: manifest, name: nil))
-    }
-
     // MARK: - EngineManifest decoding
-
-    func testDecodesTheInArchiveManifestShape() throws {
-        let json = """
-        {"schemaVersion":1,"engineId":"cx26.3-w11-gamma087","versionLabel":"CX26.3.0-W11-Gamma087",
-         "buildNumber":14,"minimumMacOS":"15.0","artifact":null,"artifactSHA256":null}
-        """
-        let manifest = try EngineManifest.decode(from: Data(json.utf8))
-        XCTAssertEqual(manifest.buildNumber, 14)
-        XCTAssertNil(manifest.artifact)
-    }
 
     func testDecodesTheSidecarManifestShape() throws {
         let json = """
@@ -115,178 +73,8 @@ final class EngineArchiveTests {
 
     func testEveryFieldExceptSchemaVersionIsOptional() throws {
         let manifest = try EngineManifest.decode(from: Data(#"{"schemaVersion":1}"#.utf8))
-        XCTAssertNil(manifest.engineId)
-        XCTAssertNil(manifest.buildNumber)
-        XCTAssertNil(manifest.minimumMacOS)
-    }
-
-    // MARK: - EngineFloor (pure computation)
-
-    private var v14: EngineBuildVersion { EngineBuildVersion(crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 14) }
-    private var v10: EngineBuildVersion { EngineBuildVersion(crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 10) }
-    private var v1: EngineBuildVersion { EngineBuildVersion(crossover: [0], wineMajor: 0, gamma: 0, build: 1) }
-
-    func testFloorFromLiveAndNoCache() {
-        let floor = EngineFloor.compute(live: v14, cached: nil, compiledMinimum: v1)
-        XCTAssertEqual(floor.version, v14)
-        XCTAssertEqual(floor.source, .liveRelease)
-    }
-
-    func testFloorFromLiveOlderThanCacheStillUsesTheHigherCache() {
-        // A machine that saw v14 once must not be talked down to v10 by a
-        // later resolve that (implausibly) returns an older "latest".
-        let floor = EngineFloor.compute(live: v10, cached: v14, compiledMinimum: v1)
-        XCTAssertEqual(floor.version, v14)
-        XCTAssertEqual(floor.source, .cachedRelease)
-    }
-
-    func testFloorFromCacheOnlyWhenLiveUnavailable() {
-        let floor = EngineFloor.compute(live: nil, cached: v10, compiledMinimum: v1)
-        XCTAssertEqual(floor.version, v10)
-        XCTAssertEqual(floor.source, .cachedRelease)
-    }
-
-    func testFloorFallsBackToCompiledMinimumWithNoLiveAndNoCache() {
-        let floor = EngineFloor.compute(live: nil, cached: nil, compiledMinimum: v1)
-        XCTAssertEqual(floor.version, v1)
-        XCTAssertEqual(floor.source, .compiledMinimum)
-    }
-
-    func testFloorNeverDropsBelowTheCompiledMinimumEvenIfCacheIsSomehowOlder() {
-        let ancient = EngineBuildVersion(crossover: [0], wineMajor: 0, gamma: 0, build: 0)
-        let floor = EngineFloor.compute(live: nil, cached: ancient, compiledMinimum: v1)
-        XCTAssertEqual(floor.version, v1)
-        XCTAssertEqual(floor.source, .compiledMinimum)
-    }
-
-    /// Regression: a live release below the compiled minimum used to be
-    /// reported as the cached release in the refusal message.
-    func testFloorNamesTheCompiledMinimumWhenItOutranksTheLiveRelease() {
-        let floor = EngineFloor.compute(live: v1, cached: nil, compiledMinimum: v10)
-        XCTAssertEqual(floor.version, v10)
-        XCTAssertEqual(floor.source, .compiledMinimum)
-    }
-
-    func testFloorCacheOnlyEverMovesUp() throws {
-        let cache = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gamma-floor-tests-\(UUID().uuidString)")
-        _ = EngineFloor.resolve(cacheDirectory: cache, live: v14, recordsLiveRelease: true)
-        _ = EngineFloor.resolve(cacheDirectory: cache, live: v10, recordsLiveRelease: true)
-        let offline = EngineFloor.resolve(cacheDirectory: cache, live: nil, recordsLiveRelease: true)
-        XCTAssertEqual(offline.version, v14)
-        XCTAssertEqual(offline.source, .cachedRelease)
-    }
-
-    func testFloorFromASubstituteListingIsNotCached() {
-        let cache = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gamma-floor-tests-\(UUID().uuidString)")
-        let online = EngineFloor.resolve(cacheDirectory: cache, live: v14, recordsLiveRelease: false)
-        XCTAssertEqual(online.version, v14)
-        XCTAssertNil(EngineFloor.readCache(cacheDirectory: cache))
-    }
-
-    /// Regression: an earlier draft built the compiled minimum from an
-    /// all-zero placeholder generation (crossover [0], wineMajor 0, gamma 0).
-    /// Ordering compares generation before build counter, so that placeholder
-    /// was outranked by any real CX26/Gamma87 archive regardless of its build
-    /// number — build 0 of the real generation was silently accepted. The
-    /// real compiled minimum must be expressed in the current generation for
-    /// its build-number floor to mean anything.
-    func testCompiledMinimumIsExpressedInTheCurrentGenerationSoBuildZeroIsRefused() {
-        let zeroBuildSameGeneration = EngineBuildVersion(crossover: [26, 3, 0], wineMajor: 11, gamma: 87, build: 0)
-        XCTAssertTrue(zeroBuildSameGeneration < SetupDefaults.minimumSupportedEngine)
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 0)
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil,
-            floor: SetupDefaults.minimumSupportedEngine, floorSource: .compiledMinimum
-        )
-        guard case .refuse(.olderThanFloor) = decision else {
-            return XCTFail("expected the compiled minimum to refuse build 0 of its own generation")
-        }
-    }
-
-    // MARK: - EngineArchiveGate
-
-    func testAcceptsAnArchiveAtOrAboveTheFloor() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 14)
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v14, floorSource: .liveRelease
-        )
-        guard case .accept(let version) = decision else { return XCTFail("expected accept") }
-        XCTAssertEqual(version.build, 14)
-    }
-
-    func testRefusesAnArchiveBelowTheFloorWithNoOverride() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 10)
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v14, floorSource: .liveRelease
-        )
-        guard case .refuse(.olderThanFloor(let archive, let floor, _)) = decision else {
-            return XCTFail("expected olderThanFloor refusal")
-        }
-        XCTAssertEqual(archive.build, 10)
-        XCTAssertEqual(floor.build, 14)
-    }
-
-    func testAcceptsANewerLocalBuildAboveTheFloor() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 20)
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v14, floorSource: .liveRelease
-        )
-        guard case .accept = decision else { return XCTFail("expected accept") }
-    }
-
-    func testRefusesAnArchiveNeedingANewerMacOS() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 14, minimumMacOS: "26.0")
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v1, floorSource: .compiledMinimum,
-            currentOperatingSystem: DottedVersion(components: [15, 0, 0])
-        )
-        guard case .refuse(.macOSTooOld(let required, _)) = decision else {
-            return XCTFail("expected macOSTooOld refusal")
-        }
-        XCTAssertEqual(required, "26.0")
-    }
-
-    func testAcceptsWhenThisMacMeetsTheRequiredMacOS() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 14, minimumMacOS: "15.0")
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v1, floorSource: .compiledMinimum,
-            currentOperatingSystem: DottedVersion(components: [15, 0, 0])
-        )
-        guard case .accept = decision else { return XCTFail("expected accept") }
-    }
-
-    func testRefusesAnArchiveNeedingANewerSetupTool() {
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 14, minimumSetupToolVersion: "2.0")
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v1, floorSource: .compiledMinimum,
-            currentToolVersion: "0.90"
-        )
-        guard case .refuse(.setupToolTooOld(let required, let current)) = decision else {
-            return XCTFail("expected setupToolTooOld refusal")
-        }
-        XCTAssertEqual(required, "2.0")
-        XCTAssertEqual(current, "0.90")
-    }
-
-    func testAcceptsAnEqualVersionNotOnlyNewer() {
-        // The rule is "older", not "not newer" — equal must be accepted.
-        let manifest = EngineManifest(versionLabel: "CX26.3.0-W11-Gamma087", buildNumber: 14)
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v14, floorSource: .liveRelease
-        )
-        guard case .accept = decision else { return XCTFail("expected accept") }
-    }
-
-    func testRefusesRatherThanGuessingWhenTheManifestLabelIsUnreadable() {
-        let manifest = EngineManifest(versionLabel: "garbage")
-        let decision = EngineArchiveGate.evaluate(
-            manifest: manifest, archiveName: nil, floor: v1, floorSource: .compiledMinimum
-        )
-        guard case .refuse(.unreadableManifest) = decision else {
-            return XCTFail("expected unreadableManifest refusal")
-        }
+        XCTAssertNil(manifest.artifact)
+        XCTAssertNil(manifest.artifactSHA256)
     }
 
     // MARK: - EngineReleaseResolver (pure selection over fixtures)
@@ -329,68 +117,6 @@ final class EngineArchiveTests {
 
     func testThrowsWhenNoEngineReleaseExists() {
         XCTAssertThrows(try EngineReleaseResolver.newestEngineRelease(in: [GitHubRelease(tagName: "v0.86", assets: [])]))
-    }
-
-    // MARK: - EngineArchiveProbe
-
-    /// Builds `wswine.bundle/engine-manifest.json` into a real archive of the
-    /// requested kind, so the probe is exercised against actual compression.
-    private func makeArchive(named name: String) throws -> URL {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("engine-probe-\(UUID().uuidString)")
-        let bundle = root.appendingPathComponent("wswine.bundle")
-        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
-        try Data(#"{"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":15}"#.utf8)
-            .write(to: bundle.appendingPathComponent("engine-manifest.json"))
-        let archive = root.appendingPathComponent(name)
-        let tar = root.appendingPathComponent("plain.tar")
-        try runTool("/usr/bin/tar", ["-cf", tar.path, "-C", root.path, "wswine.bundle"])
-        if name.hasSuffix(".tar.xz") {
-            try runTool("/usr/bin/tar", ["-cJf", archive.path, "-C", root.path, "wswine.bundle"])
-        } else if let zstd = ZstdLocator.locate() {
-            try runTool(zstd.path, ["-q", "-f", tar.path, "-o", archive.path])
-        } else {
-            throw TestFailure(description: "zstd not installed")
-        }
-        return archive
-    }
-
-    private func runTool(_ path: String, _ arguments: [String]) throws {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: path)
-        process.arguments = arguments
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw TestFailure(description: "\(path) \(arguments) exited \(process.terminationStatus)")
-        }
-    }
-
-    func testProbeReadsATarXzArchive() throws {
-        let manifest = try EngineArchiveProbe.readManifest(archiveURL: try makeArchive(named: "CX26W11-GAMMA-DXMT-15.tar.xz"))
-        XCTAssertEqual(manifest.buildNumber, 15)
-    }
-
-    /// A Finder-launched app has no Homebrew directory on PATH; the probe must
-    /// still find zstd for bsdtar.
-    func testProbeReadsATarZstArchiveWithAFinderLikePath() throws {
-        guard ZstdLocator.locate() != nil else { return } // zstd not installed here
-        let archive = try makeArchive(named: "CX26W11-GAMMA-DXMT-15.tar.zst")
-        let savedPath = ProcessInfo.processInfo.environment["PATH"]
-        setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin", 1)
-        defer { if let savedPath { setenv("PATH", savedPath, 1) } }
-        let manifest = try EngineArchiveProbe.readManifest(archiveURL: archive)
-        XCTAssertEqual(manifest.buildNumber, 15)
-    }
-
-    func testProbeRefusesAZstArchiveClearlyWhenZstdIsMissing() {
-        let archive = URL(fileURLWithPath: "/nonexistent/CX26W11-GAMMA-DXMT-15.tar.zst")
-        do {
-            _ = try EngineArchiveProbe.readManifest(archiveURL: archive, zstd: nil)
-            recordFailure("expected a refusal", file: #file, line: #line)
-        } catch {
-            XCTAssertContains(error.localizedDescription, "brew install zstd")
-        }
     }
 
     // MARK: - Tool version stays in step with build.sh

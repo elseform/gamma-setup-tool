@@ -31,8 +31,7 @@ struct SetupPage: View {
 
     // Left empty (the default), the
     // newest published gamma-wine-engine release is resolved and downloaded
-    // automatically; a path here is an explicit local override, refused the
-    // same way a downloaded release is if it is older than the current floor.
+    // automatically; a path here is a local archive, used as is.
     private var engineArchiveControls: some View {
         VStack(alignment: .leading, spacing: 6) {
             CardHeading(title: "Engine archive")
@@ -47,7 +46,7 @@ struct SetupPage: View {
             }
             Text(model.wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                  ? "Downloads the latest engine release automatically. Choose a local .tar.zst or .tar.xz archive to use it instead."
-                 : "Uses this local archive. Setup checks that its engine version is supported.")
+                 : "Uses this local archive as is.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

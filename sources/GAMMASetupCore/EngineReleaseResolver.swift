@@ -65,8 +65,7 @@ public enum EngineReleaseResolverError: Error, CustomStringConvertible, Localize
 /// Deliberately lists `/releases` and filters `tag_name` by the `engine-`
 /// prefix rather than calling `/releases/latest`: `publish-release.sh` marks
 /// releases neither `--latest` nor `--prerelease`, so GitHub's own "latest"
-/// heuristic could hand back an unrelated tag, or a release marked prerelease
-/// could otherwise lower the floor unexpectedly. Ordering by `max(by:)` with
+/// heuristic could hand back an unrelated tag. Ordering with
 /// `EngineBuildVersion`'s comparator (not array/tag-string order) also avoids
 /// the trap where the string `"engine-...-7"` sorts after `"engine-...-10"`.
 public enum EngineReleaseResolver {
@@ -83,13 +82,6 @@ public enum EngineReleaseResolver {
             return url
         }
         return defaultReleasesURL
-    }
-
-    /// False while `GAMMA_ENGINE_RELEASES_URL` points somewhere else. A
-    /// substitute listing is not the real release history, so it must not
-    /// raise this machine's cached version floor.
-    public static var isUsingDefaultReleasesURL: Bool {
-        releasesURL == defaultReleasesURL
     }
 
     public static func urlSessionTransport(_ url: URL) async throws -> Data {
@@ -130,9 +122,8 @@ public enum EngineReleaseResolver {
               let manifestURL = URL(string: manifest.browserDownloadURL) else {
             throw EngineReleaseResolverError.malformedRelease(release.tagName)
         }
-        // The build counter is parsed from the archive filename here; the
-        // manifest (fetched and cross-checked separately, once the archive is
-        // downloaded) is the source of truth once it is in hand.
+        // The build counter comes from the archive filename; together with
+        // the tag's version label it orders releases.
         guard let counter = EngineVersionParser.parseBuildCounter(fromName: archive.name),
               let labelParts = EngineVersionParser.parseLabel(release.tagName.replacingOccurrences(of: "engine-", with: "")) else {
             throw EngineReleaseResolverError.malformedRelease(release.tagName)
@@ -141,8 +132,7 @@ public enum EngineReleaseResolver {
             crossover: labelParts.crossover,
             wineMajor: labelParts.wineMajor,
             gamma: labelParts.gamma,
-            build: counter,
-            family: EngineVersionParser.parseFamily(fromName: archive.name)
+            build: counter
         )
         return ResolvedEngineRelease(
             version: version,

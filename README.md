@@ -11,10 +11,8 @@ This README describes the current source. Published builds are available on the 
 - An Apple Silicon Mac running macOS 15 or newer, with Rosetta 2 for the Wine engine.
 - An existing G.A.M.M.A. installation and its `ModOrganizer.exe`, or another Windows executable to launch.
 - Python 3 available to setup. The backend checks `/usr/bin/python3`, `/opt/homebrew/bin/python3`, then `/usr/local/bin/python3`.
-- `zstd` for `.tar.zst` engine archives. `.tar.xz` archives are also supported.
+- `zstd` for `.tar.zst` engine archives, including every published release (`brew install zstd`). `.tar.xz` archives are also supported.
 - Internet access for automatic engine resolution and missing runtime downloads. For offline setup, select a local engine archive and provide or cache the runtime files described below.
-
-An engine archive can declare a higher minimum macOS or setup-tool version, which setup checks before creating the wrapper.
 
 ## Create a Wrapper
 
@@ -31,11 +29,9 @@ Setup checks the selected executable exists; it does not validate the contents o
 
 ## Engine Selection and Downloads
 
-With **Engine archive** empty, setup resolves the newest valid `engine-*` release from `elseform/gamma-wine-engine`, ordered by engine version. It downloads the archive and verifies its SHA-256 against the release manifest. Cached archives are checked by checksum before reuse.
+With **Engine archive** empty, setup always uses the newest `engine-*` release from `elseform/gamma-wine-engine`, ordered by engine version. It downloads the archive and verifies its SHA-256 against the release manifest. Cached archives are checked by checksum before reuse.
 
-A local archive is an explicit override, but it still passes the version gate. Setup refuses engines older than the highest of the currently resolved release, the cached release version, and the minimum supported by this setup-tool build. Equal or newer versions are accepted. Unreadable manifests and unidentifiable builds are rejected; there is no wizard option to bypass the gate.
-
-Automatic selection needs access to the release listing and manifest even when the archive is cached. If no release can be resolved, select a local archive. Local selection can proceed offline using the cached version floor or the compiled minimum.
+A local archive is used exactly as selected, with no version check. Automatic selection needs access to the release listing and manifest even when the archive is cached; offline, select a local archive.
 
 The wizard creates DXMT wrappers with the engine's declared runtime dependencies. It has no renderer, Wine-version, Winetricks-verb, or display-mode selector.
 
@@ -79,7 +75,7 @@ Downloads are cached at:
 ~/Library/Application Support/gamma-setup-tool/cache/redist-installers/
 ```
 
-The engine cache also contains `latest-release.json`, the saved release version used by the gate. For failed setup, use the detailed log and the Discord support link in the app.
+For failed setup, use the detailed log and the Discord support link in the app.
 
 ## Build and Test
 
@@ -93,16 +89,16 @@ This compiles the GUI and backend with `swiftc` for Apple Silicon and macOS 15, 
 
 - `./build.sh run` builds and runs the GUI from `dist/` without installing it.
 - `./build.sh clean` removes `dist/`.
-- `./test.sh` runs Swift unit tests, backend CLI integration tests, and a build smoke test. The smoke test invokes `build.sh`, so it also installs the setup tool into `~/Applications`.
+- `./test.sh` runs Swift unit tests, backend CLI integration tests, and a build smoke test. The smoke test runs `build.sh bundle`, which builds `dist/` without installing anything.
 
-Developers can set `GAMMA_ENGINE_ARTIFACTS_DIR` in the app's environment to prefill the local archive field with the most recently modified `.tar.zst` or `.tar.xz` in that directory. The selected archive still passes the version gate.
+Developers can set `GAMMA_ENGINE_ARTIFACTS_DIR` in the app's environment to prefill the local archive field with the most recently modified `.tar.zst` or `.tar.xz` in that directory.
 
 ### Source Layout
 
 | Path | Responsibility |
 | --- | --- |
 | `sources/GAMMASetupTool/` | SwiftUI wizard, setup state, request construction, and progress display. |
-| `sources/GAMMASetupCore/` | Shared models, engine release resolution, checksum verification, version gate, wrapper pipeline, and USVFS updates. |
+| `sources/GAMMASetupCore/` | Shared models, engine release resolution, checksum verification, wrapper pipeline, and USVFS updates. |
 | `sources/GAMMASetupEngine/` | `gamma-setup-engine` CLI backend, called by the GUI through `create-wine-engine`. |
 | `sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py` | Canonical wrapper-creation script, bundled by `build.sh`. |
 | `tests/` | Swift unit tests and shell CLI integration tests. |

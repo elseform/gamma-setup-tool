@@ -1,27 +1,19 @@
 import Foundation
 
-/// An engine build, ordered so "is this archive older than the current one?"
-/// has one answer.
-///
-/// Ordering is CrossOver version, then Wine major, then the GAMMA counter,
-/// then the build counter. `family` (`GAMMA-DXMT` for DXMT-only builds, the
-/// GPTK-named form otherwise) is metadata and is deliberately not ordered:
-/// switching payload families does not make a build newer or older.
+/// A published engine build, ordered so "which release is newest?" has one
+/// answer: CrossOver version, then Wine major, then the GAMMA counter, then
+/// the build counter.
 public struct EngineBuildVersion: Comparable, CustomStringConvertible {
     public let crossover: [Int]
     public let wineMajor: Int
     public let gamma: Int
     public let build: Int
-    public let family: String?
-    public let label: String?
 
-    public init(crossover: [Int], wineMajor: Int, gamma: Int, build: Int, family: String? = nil, label: String? = nil) {
+    public init(crossover: [Int], wineMajor: Int, gamma: Int, build: Int) {
         self.crossover = crossover
         self.wineMajor = wineMajor
         self.gamma = gamma
         self.build = build
-        self.family = family
-        self.label = label
     }
 
     public var description: String {
@@ -37,10 +29,7 @@ public struct EngineBuildVersion: Comparable, CustomStringConvertible {
         return Array(padded.prefix(3)) + [wineMajor, gamma, build]
     }
 
-    /// Hand-written on purpose. A synthesised `Equatable` would also compare
-    /// `family` and `label`, so two builds could be unequal while neither is
-    /// less than the other — that breaks strict weak ordering and silently
-    /// corrupts `sorted()` and `max()`.
+    /// Hand-written so the padded forms compare equal, consistent with `<`.
     public static func == (lhs: EngineBuildVersion, rhs: EngineBuildVersion) -> Bool {
         lhs.ordering == rhs.ordering
     }
@@ -53,22 +42,6 @@ public struct EngineBuildVersion: Comparable, CustomStringConvertible {
         }
         return false
     }
-}
-
-public enum EngineVersionParseError: Error, CustomStringConvertible, LocalizedError {
-    case unreadableLabel(String)
-    case unknownBuildNumber(String)
-
-    public var description: String {
-        switch self {
-        case .unreadableLabel(let value):
-            return "cannot read an engine version from \"\(value)\""
-        case .unknownBuildNumber(let value):
-            return "cannot tell which build \"\(value)\" is; refusing rather than assuming it is the oldest"
-        }
-    }
-
-    public var errorDescription: String? { description }
 }
 
 public enum EngineVersionParser {
@@ -94,40 +67,5 @@ public enum EngineVersionParser {
         }
         guard let dash = stem.lastIndex(of: "-") else { return nil }
         return Int(stem[stem.index(after: dash)...])
-    }
-
-    /// The payload family an archive name encodes, e.g. `GAMMA-DXMT`. Metadata
-    /// only; it takes no part in ordering.
-    public static func parseFamily(fromName name: String) -> String? {
-        name.contains("GAMMA-DXMT") ? "GAMMA-DXMT" : nil
-    }
-
-    /// Build a version from a manifest plus the name it was found under.
-    /// `buildNumber` in the manifest wins; otherwise the counter comes from the
-    /// archive name (or release tag). An unknown counter is a refusal, never 0.
-    public static func version(
-        manifest: EngineManifest,
-        name: String?
-    ) throws -> EngineBuildVersion {
-        let labelSource = manifest.versionLabel ?? manifest.engineId ?? ""
-        guard let parsed = parseLabel(labelSource) else {
-            throw EngineVersionParseError.unreadableLabel(labelSource)
-        }
-        let build: Int
-        if let recorded = manifest.buildNumber {
-            build = recorded
-        } else if let name, let counter = parseBuildCounter(fromName: name) {
-            build = counter
-        } else {
-            throw EngineVersionParseError.unknownBuildNumber(name ?? labelSource)
-        }
-        return EngineBuildVersion(
-            crossover: parsed.crossover,
-            wineMajor: parsed.wineMajor,
-            gamma: parsed.gamma,
-            build: build,
-            family: name.flatMap(parseFamily(fromName:)),
-            label: manifest.versionLabel
-        )
     }
 }

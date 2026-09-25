@@ -62,8 +62,8 @@ extension AppModel {
 
     /// An empty wineEngineArchivePath is valid on its own: the engine then
     /// resolves and downloads the newest published gamma-wine-engine release
-    /// (see WineEngineSetup.resolveArchive). A non-empty path is an explicit
-    /// local override, still gated the same way a downloaded release is.
+    /// (see WineEngineSetup.resolveArchive). A non-empty path is a local
+    /// archive, used as is.
     var setupReady: Bool {
         selectedLaunchExecutableFound && wrapperNameIsValid && !zstdMissing
     }

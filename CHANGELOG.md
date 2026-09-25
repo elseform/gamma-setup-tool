@@ -21,11 +21,9 @@
   `ModOrganizer.exe`; a custom launch executable elsewhere no longer receives them. MO2's
   own copies that differ are backed up to `gamma-setup-tool-backups/usvfs-<timestamp>/`
   in the MO2 folder before being replaced.
-- With no local archive selected, setup downloads the newest published
+- With no local archive selected, setup always downloads the newest published
   `gamma-wine-engine` release, verifies its checksum, and caches it. A local
-  `.tar.zst` or `.tar.xz` archive can still be selected instead.
-- An engine archive older than the newest published release, or one that needs a
-  newer macOS or setup tool, is refused before anything is installed.
+  `.tar.zst` or `.tar.xz` archive can be selected instead and is used as is.
 - `.tar.zst` engine archives, including every published release, need `zstd`
   (`brew install zstd`). The setup page says so and blocks setup when it is missing.
 - A failed setup no longer deletes a Wine prefix or settings file left in

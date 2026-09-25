@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct CreatePage: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @Binding var createButtonSubmitted: Bool
 
     // MARK: - Body
@@ -183,7 +183,7 @@ struct CreatePage: View {
 }
 
 struct CompletePage: View {
-    @ObservedObject var model: AppModel
+    let model: AppModel
 
     // MARK: - Body
 

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct WrapperNamePage: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
     @FocusState private var appNameIsFocused: Bool
 
     var body: some View {

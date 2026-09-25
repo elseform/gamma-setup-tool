@@ -5,7 +5,7 @@ import GAMMASetupCore
 #endif
 
 struct SetupPage: View {
-    @ObservedObject var model: AppModel
+    @Bindable var model: AppModel
 
     @State private var showRedistInstallers = false
     @State private var redistInstallerStatuses: [RedistInstallers.Status] = []

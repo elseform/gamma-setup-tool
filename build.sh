@@ -53,6 +53,10 @@ is_stale() {
   return 1
 }
 
+# Assemble the bundle from scratch so files removed from the sources do not
+# linger in dist/ (and from there in the installed app). Compiled binaries are
+# kept in $INTERMEDIATES_DIR, outside the bundle.
+rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$MODULE_CACHE_DIR" "$INTERMEDIATES_DIR"
 
 swiftc \
@@ -90,6 +94,7 @@ fi
 # wine-engine/), not in gamma-wine-engine — no cross-repo sync needed.
 rm -rf "$RESOURCES_DIR/wine-engine"
 cp -R "$SOURCE_RESOURCES_DIR/wine-engine" "$RESOURCES_DIR/wine-engine"
+rm -rf "$RESOURCES_DIR/wine-engine/__pycache__"
 chmod +x "$RESOURCES_DIR/wine-engine/interactive_setup.py"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'

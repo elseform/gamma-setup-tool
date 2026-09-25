@@ -188,40 +188,37 @@ extension AppModel {
         installStageIndex = 0
         installStageCompletedIndex = -1
         installFailed = false
-        receivedInstallStageEvents = false
         progress = 0
         logText = ""
+        pendingLogText = ""
         savedLogPath = ""
         statusText = "Creating"
-        pendingEngineEventText = ""
+        pendingEngineOutput = Data()
+        let succeeded: Bool
         do {
-            let result = try await runEngine(command: "create-wine-engine", request: wineEngineRequest(), stream: true)
-            isRunning = false
-            progress = result.exitCode == 0 ? 1 : progress
-            if result.exitCode == 0 {
-                installStageCompletedIndex = installStageCount - 1
-                installStageIndex = installStageCount
+            let exitCode = try await runEngine(command: "create-wine-engine", request: wineEngineRequest())
+            succeeded = exitCode == 0
+            if !succeeded && !(logText + pendingLogText).localizedCaseInsensitiveContains("error:") {
+                appendLog("\nerror: setup exited while running \(installStageName(at: installStageIndex)).\n")
             }
-            statusText = result.exitCode == 0 ? WrapperCreatedCopy.title : "Failed"
-            if result.exitCode != 0 && !logText.localizedCaseInsensitiveContains("error:") {
-                logText += "\nerror: setup exited while running \(installStageName(at: installStageIndex)).\n"
-            }
-            if result.exitCode == 0 {
-                frozenSetupSummaryItems = nil
-                installStageIndex = -1
-                installStageCompletedIndex = -1
-                installFailed = false
-            } else {
-                installFailed = true
-            }
-            return result.exitCode == 0
         } catch {
-            isRunning = false
-            logText += "\n\(error.localizedDescription)"
+            succeeded = false
+            appendLog("\n\(error.localizedDescription)\n")
+        }
+        flushLog()
+        isRunning = false
+        if succeeded {
+            progress = 1
+            statusText = WrapperCreatedCopy.title
+            frozenSetupSummaryItems = nil
+            installStageIndex = -1
+            installStageCompletedIndex = -1
+            installFailed = false
+        } else {
             statusText = "Failed"
             installFailed = true
-            return false
         }
+        return succeeded
     }
 
     func resetForNewWrapper() {

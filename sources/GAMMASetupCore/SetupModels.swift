@@ -1,12 +1,15 @@
 import Foundation
 
+/// Declared in the order a setup run reaches them: `dependencies` is the
+/// Swift side's archive resolution, the rest come from interactive_setup.py.
+/// The GUI's stage rows follow this order.
 public enum SetupEngineStage: String, Codable, CaseIterable {
     case dependencies
-    case wrapper
     case engine
     case prefix
     case driveMapping
     case winetricks
+    case wrapper
     case finalize
 }
 

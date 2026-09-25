@@ -40,6 +40,7 @@ do {
         let request = try loadWineEngineRequest(from: arguments)
         let wineEngineSetup = WineEngineSetup(executablePath: CommandLine.arguments[0], reporter: reporter)
         try await wineEngineSetup.create(request: request)
+        reporter.completed(success: true, message: "Setup complete.")
     case "-h", "--help":
         print(usage())
     default:

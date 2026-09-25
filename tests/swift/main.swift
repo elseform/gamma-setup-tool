@@ -134,6 +134,12 @@ run("testMissingBinariesAreInstalledWithoutABackup", usvfs.testMissingBinariesAr
 run("testRepeatedUpdatesKeepEarlierBackups", usvfs.testRepeatedUpdatesKeepEarlierBackups)
 run("testModOrganizerDetectionIgnoresLetterCase", usvfs.testModOrganizerDetectionIgnoresLetterCase)
 
+let relay = ScriptOutputRelayTests()
+run("testHoldsBackTheScriptsCompletedEventButKeepsItsFailure", relay.testHoldsBackTheScriptsCompletedEventButKeepsItsFailure)
+run("testIgnoresASuccessfulCompletedEvent", relay.testIgnoresASuccessfulCompletedEvent)
+run("testRelaysLinesSplitAcrossChunksAndAFinalUnterminatedLine", relay.testRelaysLinesSplitAcrossChunksAndAFinalUnterminatedLine)
+run("testStopsAcceptingOutputAfterFinish", relay.testStopsAcceptingOutputAfterFinish)
+
 let tones = SetupStatusToneTests()
 run("testCheckRowTonesMatchEnvironmentColoringRules", tones.testCheckRowTonesMatchEnvironmentColoringRules)
 run("testStatusRowTonesMatchCheckRows", tones.testStatusRowTonesMatchCheckRows)

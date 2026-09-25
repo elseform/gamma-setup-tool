@@ -71,11 +71,25 @@ public final class WineEngineSetup {
             )
             try reporter.attachLog(logURL)
         }
-        let scriptURL = try locateScript()
-        let cacheDir = appSupportDirectory.appendingPathComponent("cache/gamma-wine-engine")
-        let archiveURL = try await resolveArchive(request: request, cacheDir: cacheDir)
-        let exeRelPath = try resolveExeRelPath(request: request)
-        let pythonBin = try resolvePython3()
+        // Everything before interactive_setup.py runs is the "dependencies"
+        // stage: finding the script and Python, and resolving, downloading
+        // and gating the engine archive.
+        reporter.stageStarted(.dependencies)
+        let scriptURL: URL
+        let archiveURL: URL
+        let exeRelPath: String
+        let pythonBin: String
+        do {
+            scriptURL = try locateScript()
+            let cacheDir = appSupportDirectory.appendingPathComponent("cache/gamma-wine-engine")
+            archiveURL = try await resolveArchive(request: request, cacheDir: cacheDir)
+            exeRelPath = try resolveExeRelPath(request: request)
+            pythonBin = try resolvePython3()
+        } catch {
+            reporter.stageFailed(.dependencies, message: error.localizedDescription)
+            throw error
+        }
+        reporter.stageFinished(.dependencies)
 
         var arguments: [String] = [
             scriptURL.path,
@@ -104,8 +118,15 @@ public final class WineEngineSetup {
 
         try runPython(pythonBin: pythonBin, arguments: arguments)
 
+        // The wrapper is complete and usable at this point; MO2's usvfs files
+        // are a separate, recoverable concern, so a failure here is reported
+        // but does not turn a working wrapper into a failed setup.
         if request.updateUSVFS {
-            try updateUSVFSIfNeeded(request: request)
+            do {
+                try updateUSVFSIfNeeded(request: request)
+            } catch {
+                reporter.log("Warning: could not update ModOrganizer's USVFS files: \(error.localizedDescription)", severity: "warning")
+            }
         }
     }
 
@@ -277,6 +298,14 @@ public final class WineEngineSetup {
 
     // MARK: - Subprocess
 
+    /// Relays the script's NDJSON events through `reporter` and returns once
+    /// it has exited and every byte of its output has been handled. Output is
+    /// read on this thread until EOF (the write end closes when the script
+    /// exits), so nothing is lost to a handler still running after
+    /// `waitUntilExit()` and no state is shared across threads. The script's
+    /// own `completed` event is not forwarded: setup is not complete until
+    /// the USVFS step after it has run, and `main.swift` reports the one
+    /// final outcome.
     private func runPython(pythonBin: String, arguments: [String]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pythonBin)
@@ -286,38 +315,31 @@ public final class WineEngineSetup {
         process.standardOutput = pipe
         process.standardError = pipe
 
-        let decoder = JSONDecoder()
-        var buffer = Data()
-        var sawFailure = false
-        var failureMessage = "interactive_setup.py failed"
-        let newline = Data([0x0A])
-
-        pipe.fileHandleForReading.readabilityHandler = { [reporter] handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            buffer.append(chunk)
-            while let range = buffer.range(of: newline) {
-                let lineData = buffer.subdata(in: buffer.startIndex..<range.lowerBound)
-                buffer.removeSubrange(buffer.startIndex..<range.upperBound)
-                guard !lineData.isEmpty else { continue }
-                if let event = try? decoder.decode(SetupEngineEvent.self, from: lineData) {
-                    reporter.forward(event)
-                    if event.type == .completed, event.success == false {
-                        sawFailure = true
-                        failureMessage = event.message ?? failureMessage
-                    }
-                } else if let text = String(data: lineData, encoding: .utf8) {
-                    reporter.log(text)
-                }
+        let relay = ScriptOutputRelay(reporter: reporter)
+        try process.run()
+        let reader = pipe.fileHandleForReading
+        let drained = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .userInitiated).async {
+            while true {
+                let chunk = reader.availableData
+                if chunk.isEmpty || !relay.receive(chunk) { break }
             }
+            drained.signal()
+        }
+        process.waitUntilExit()
+        // EOF normally follows exit at once. A process the script left
+        // running with its stdout inherited would hold the pipe open forever,
+        // so after a grace period the remaining output is abandoned rather
+        // than hanging setup.
+        if drained.wait(timeout: .now() + 10) == .timedOut {
+            reporter.log("interactive_setup.py exited but its output is still open; continuing without it", severity: "warning")
         }
 
-        try process.run()
-        process.waitUntilExit()
-        pipe.fileHandleForReading.readabilityHandler = nil
-
-        if process.terminationStatus != 0 || sawFailure {
+        if let failureMessage = relay.finish() {
             throw WineEngineSetupError.message(failureMessage)
+        }
+        if process.terminationStatus != 0 {
+            throw WineEngineSetupError.message("interactive_setup.py exited with status \(process.terminationStatus)")
         }
     }
 }

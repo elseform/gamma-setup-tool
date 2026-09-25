@@ -23,6 +23,7 @@ swiftc \
   "$ROOT_DIR/tests/swift/EngineArchiveTests.swift" \
   "$ROOT_DIR/tests/swift/SetupStatusToneTests.swift" \
   "$ROOT_DIR/tests/swift/USVFSUpdaterTests.swift" \
+  "$ROOT_DIR/tests/swift/ScriptOutputRelayTests.swift" \
   "$ROOT_DIR/tests/swift/main.swift" \
   -o "$SWIFT_TEST_BINARY"
 "$SWIFT_TEST_BINARY"

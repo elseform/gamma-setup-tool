@@ -30,6 +30,11 @@
   (`brew install zstd`). The setup page says so and blocks setup when it is missing.
 - A failed setup no longer deletes a Wine prefix or settings file left in
   `~/Library/Application Support/<app name>/` by an earlier wrapper of the same name.
+- A failed ModOrganizer USVFS update after the wrapper is built is reported as a warning
+  instead of failing an otherwise working setup.
+- The setup checklist follows the order the steps actually run in, the progress bar
+  follows the steps, and the last lines of setup output are no longer lost when setup
+  fails.
 
 ### Removals
 

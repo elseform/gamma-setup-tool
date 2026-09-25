@@ -120,18 +120,17 @@ struct CreatePage: View {
         }
     }
 
-    // Stage numbers (0-6) match SetupEngineStage's declaration order
-    // (dependencies/wrapper/engine/prefix/driveMapping/winetricks/finalize)
-    // — interactive_setup.py (Resources/wine-engine/) emits that same schema
-    // directly, relayed by WineEngineSetup.swift.
+    // Row numbers are indices into SetupEngineStage.allCases, the order a
+    // run reaches them (dependencies, engine, prefix, driveMapping,
+    // winetricks, wrapper, finalize).
     private var installStageRows: [(stage: Int, title: String, detail: String)] {
         [
             (0, "Preparing", "Resolving engine archive"),
-            (1, model.wrapperStageTitle, ""),
-            (2, "Engine", "Extracting DXMT engine"),
-            (3, "Wine prefix", "Preparing the Windows environment"),
-            (4, "Drive mapping", model.plannedWineDriveMapping),
-            (5, "Runtime dependencies", "Microsoft redistributables"),
+            (1, "Engine", "Extracting DXMT engine"),
+            (2, "Wine prefix", "Preparing the Windows environment"),
+            (3, "Drive mapping", model.plannedWineDriveMapping),
+            (4, "Runtime dependencies", "Microsoft redistributables"),
+            (5, model.wrapperStageTitle, "Launcher, settings and Configurator"),
             (6, "Finishing", "Signing the app and checking ModOrganizer USVFS")
         ]
     }

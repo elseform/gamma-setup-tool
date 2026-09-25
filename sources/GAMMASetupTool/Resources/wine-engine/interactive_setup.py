@@ -34,6 +34,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -920,9 +921,11 @@ def run_setup(args: argparse.Namespace) -> None:
         real_profile.mkdir(parents=True, exist_ok=True)
     symlink_force(wineprefix / "drive_c/users/Sikarugir", "crossover")
     symlink_force(wineprefix / "drive_c/users" / os.environ.get("USER", "user"), "crossover")
-    stage_finished("driveMapping")
 
-    stage_started("prefix", "Step 2.3: Runtime settings...")
+    # Runtime registry settings, queued here and applied in one regedit
+    # import with the redistributable overrides below. Part of the
+    # driveMapping stage so the stage sequence never goes backwards.
+    log("Step 2.3: Runtime settings...")
 
     queue_reg(r"HKEY_CURRENT_USER\Software\Wine\Drivers", "Graphics", "REG_SZ", "mac")
     queue_reg(r"HKEY_CURRENT_USER\Software\Wine\Mac Driver", "AllowSetGamma", "REG_DWORD", "0")
@@ -946,7 +949,7 @@ def run_setup(args: argparse.Namespace) -> None:
             "d3d10", "REG_SZ", "builtin",
         )
         log(f"  Added d3d10=builtin override for {exe_basename}")
-    stage_finished("prefix")
+    stage_finished("driveMapping")
 
     if runtime_mode == "verbs":
         stage_started("winetricks", "Step 2.4: Installing DirectX/VC++ components with winetricks...")
@@ -1238,6 +1241,17 @@ def main() -> None:
         completed(False, "Interrupted")
         _cleanup_partial_wrapper()
         sys.exit(130)
+    except Exception as exc:  # noqa: BLE001 - any failure must still clean up and report
+        # An unexpected error (OSError from a copy, a corrupt archive, ...)
+        # must leave no partial wrapper behind and still end the event stream
+        # with a completed event, or the caller only sees a bare exit status.
+        message = f"unexpected error: {type(exc).__name__}: {exc}"
+        if _CURRENT_STAGE:
+            stage_failed(_CURRENT_STAGE, message)
+        completed(False, message)
+        err(traceback.format_exc())
+        _cleanup_partial_wrapper()
+        sys.exit(1)
     else:
         completed(True, "Setup complete.")
 

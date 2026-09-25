@@ -6,33 +6,10 @@ import UniformTypeIdentifiers
 import GAMMASetupCore
 #endif
 
-struct ToolResult {
-    let output: String
-    let exitCode: Int32
-}
-
 struct SetupSummaryItem: Identifiable {
     var id: String { label }
     let label: String
     let planned: String
-}
-
-final class OutputBuffer: @unchecked Sendable {
-    private var data = Data()
-    private let lock = NSLock()
-
-    func append(_ newData: Data) {
-        lock.lock()
-        data.append(newData)
-        lock.unlock()
-    }
-
-    func stringValue() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        let current = data
-        return String(data: current, encoding: .utf8) ?? ""
-    }
 }
 
 @MainActor
@@ -53,8 +30,9 @@ final class AppModel: ObservableObject {
     @Published var installStageIndex = -1
     @Published var installStageCompletedIndex = -1
     @Published var installFailed = false
-    var receivedInstallStageEvents = false
-    var pendingEngineEventText = ""
+    var pendingEngineOutput = Data()
+    var pendingLogText = ""
+    var logFlushScheduled = false
 
     // gamma-wine-engine-backed pipeline (create-wine-engine) — the only
     // pipeline this app drives. appName/installDirectory/saveVerboseLog and

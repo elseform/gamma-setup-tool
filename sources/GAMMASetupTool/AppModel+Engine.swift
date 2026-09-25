@@ -83,12 +83,12 @@ extension AppModel {
 
     // MARK: - Process Execution
 
-    func runEngine<Request: Encodable>(
-        command: String,
-        request: Request,
-        extraArguments: [String] = [],
-        stream: Bool
-    ) async throws -> ToolResult {
+    /// Runs `gamma-setup-engine` and returns its exit status once every byte
+    /// of its output has been handled. Output is read on a background queue
+    /// until EOF and handed to the main queue in order; the exit status is
+    /// delivered through that same queue, so the caller never sees the run
+    /// finish before its last events are applied.
+    func runEngine<Request: Encodable>(command: String, request: Request) async throws -> Int32 {
         let engine = engineURL
         let requestURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("gamma-setup-engine-\(UUID().uuidString).json")
@@ -96,67 +96,90 @@ extension AppModel {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         try encoder.encode(request).write(to: requestURL, options: .atomic)
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = engine
-            process.arguments = [command, "--request-file", requestURL.path] + extraArguments
-            process.currentDirectoryURL = engine.deletingLastPathComponent()
+        let process = Process()
+        process.executableURL = engine
+        process.arguments = [command, "--request-file", requestURL.path]
+        process.currentDirectoryURL = engine.deletingLastPathComponent()
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
 
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = pipe
+        do {
+            try process.run()
+        } catch {
+            try? FileManager.default.removeItem(at: requestURL)
+            throw error
+        }
 
-            let buffer = OutputBuffer()
-            let handle = pipe.fileHandleForReading
-            handle.readabilityHandler = { [weak self] handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                buffer.append(data)
-                guard stream, let text = String(data: data, encoding: .utf8) else { return }
-                Task { @MainActor in
-                    self?.appendLog(text)
-                }
-            }
-
-            process.terminationHandler = { [process] proc in
-                process.terminationHandler = nil
-                handle.readabilityHandler = nil
-                try? FileManager.default.removeItem(at: requestURL)
-                let remaining = handle.readDataToEndOfFile()
-                if !remaining.isEmpty {
-                    buffer.append(remaining)
-                    if stream, let text = String(data: remaining, encoding: .utf8) {
-                        Task { @MainActor in
-                            self.appendLog(text)
-                        }
+        return await withCheckedContinuation { continuation in
+            let reader = pipe.fileHandleForReading
+            DispatchQueue.global(qos: .userInitiated).async {
+                while true {
+                    let chunk = reader.availableData
+                    if chunk.isEmpty { break }
+                    DispatchQueue.main.async {
+                        MainActor.assumeIsolated { self.receiveEngineOutput(chunk) }
                     }
                 }
-                let output = buffer.stringValue()
-                continuation.resume(returning: ToolResult(output: output, exitCode: proc.terminationStatus))
-            }
-
-            do {
-                try process.run()
-            } catch {
-                handle.readabilityHandler = nil
+                process.waitUntilExit()
                 try? FileManager.default.removeItem(at: requestURL)
-                continuation.resume(throwing: error)
+                let status = process.terminationStatus
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self.finishEngineOutput()
+                        continuation.resume(returning: status)
+                    }
+                }
             }
         }
     }
 
     // MARK: - Event Handling
 
-    private func appendLog(_ text: String) {
-        pendingEngineEventText += text
-        var lines = pendingEngineEventText.components(separatedBy: "\n")
-        pendingEngineEventText = lines.popLast() ?? ""
-        for line in lines where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if handleEngineEventLine(line) {
-                continue
-            }
-            logText += line + "\n"
+    private func receiveEngineOutput(_ data: Data) {
+        pendingEngineOutput.append(data)
+        let newline = UInt8(ascii: "\n")
+        while let index = pendingEngineOutput.firstIndex(of: newline) {
+            let line = String(decoding: pendingEngineOutput[pendingEngineOutput.startIndex..<index], as: UTF8.self)
+            pendingEngineOutput.removeSubrange(pendingEngineOutput.startIndex...index)
+            handleEngineOutputLine(line)
         }
+    }
+
+    /// Handles a final line with no trailing newline and shows any log text
+    /// still waiting for the next batched update.
+    private func finishEngineOutput() {
+        if !pendingEngineOutput.isEmpty {
+            handleEngineOutputLine(String(decoding: pendingEngineOutput, as: UTF8.self))
+            pendingEngineOutput = Data()
+        }
+        flushLog()
+    }
+
+    private func handleEngineOutputLine(_ line: String) {
+        guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if !handleEngineEventLine(line) {
+            appendLog(line + "\n")
+        }
+    }
+
+    /// Wine can print thousands of lines. Appending each one to the published
+    /// `logText` would re-render the output view per line, so appends are
+    /// batched into at most one update every 100 ms.
+    func appendLog(_ text: String) {
+        pendingLogText += text
+        guard !logFlushScheduled else { return }
+        logFlushScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            MainActor.assumeIsolated { self.flushLog() }
+        }
+    }
+
+    func flushLog() {
+        logFlushScheduled = false
+        guard !pendingLogText.isEmpty else { return }
+        logText += pendingLogText
+        pendingLogText = ""
     }
 
     private func handleEngineEventLine(_ line: String) -> Bool {
@@ -164,23 +187,21 @@ extension AppModel {
               let event = try? JSONDecoder().decode(SetupEngineEvent.self, from: data) else {
             return false
         }
-        receivedInstallStageEvents = true
 
         switch event.type {
         case .log:
             let message = event.message ?? ""
             guard !message.isEmpty else { return true }
-            logText += "==> \(message)\n"
+            appendLog("==> \(message)\n")
             statusText = message
-            progress = min(progress + 0.07, 0.95)
         case .artifact:
             if event.message == "Log file", let path = event.path {
                 savedLogPath = path
-                logText += "Log location: \(path)\n"
+                appendLog("Log location: \(path)\n")
             }
         case .completed:
             if let message = event.message, !message.isEmpty {
-                logText += "\(message)\n"
+                appendLog("\(message)\n")
             }
         case .stageStarted, .stageFinished, .stageFailed:
             guard let stage = event.stage, let index = installStageIndex(for: stage) else {
@@ -189,17 +210,13 @@ extension AppModel {
             switch event.type {
             case .stageStarted:
                 // Reaching stage N implies every earlier stage already
-                // happened, even ones this particular pipeline never emits
-                // its own stageStarted/stageFinished for (interactive_setup.py's
-                // first-ever event is "engine", index 2 — it has nothing to
-                // say about "dependencies"/"wrapper", indices 0/1) — without
-                // this, those rows stay permanently unchecked even though
-                // the install has clearly already passed them.
+                // happened, even one a given run has nothing to report for.
                 if index > 0 {
                     installStageCompletedIndex = max(installStageCompletedIndex, index - 1)
                 }
                 installStageIndex = index
                 statusText = installStageName(at: index)
+                progress = max(progress, Double(index) / Double(installStageCount))
             case .stageFinished:
                 installStageCompletedIndex = max(installStageCompletedIndex, index)
                 if installStageIndex == index {
@@ -210,7 +227,7 @@ extension AppModel {
                 installStageIndex = index
                 installFailed = true
                 if let message = event.message {
-                    logText += "error: \(message)\n"
+                    appendLog("error: \(message)\n")
                 }
             default:
                 break
@@ -219,32 +236,26 @@ extension AppModel {
         return true
     }
 
+    /// Rows follow the order stages actually run in, which is
+    /// `SetupEngineStage`'s declaration order.
     private func installStageIndex(for stage: SetupEngineStage) -> Int? {
-        switch stage {
-        case .dependencies: return 0
-        case .wrapper: return 1
-        case .engine: return 2
-        case .prefix: return 3
-        case .driveMapping: return 4
-        case .winetricks: return 5
-        case .finalize: return 6
-        }
+        SetupEngineStage.allCases.firstIndex(of: stage)
     }
 
     var installStageCount: Int {
-        7
+        SetupEngineStage.allCases.count
     }
 
     func installStageName(at index: Int) -> String {
-        switch index {
-        case 0: return "preparing"
-        case 1: return "wrapper creation"
-        case 2: return "engine extraction"
-        case 3: return "prefix initialization"
-        case 4: return "drive mapping"
-        case 5: return "installing redist DLLs"
-        case 6: return "finalizing"
-        default: return "setup"
+        guard SetupEngineStage.allCases.indices.contains(index) else { return "setup" }
+        switch SetupEngineStage.allCases[index] {
+        case .dependencies: return "preparing"
+        case .engine: return "engine extraction"
+        case .prefix: return "prefix initialization"
+        case .driveMapping: return "drive mapping"
+        case .winetricks: return "installing redist DLLs"
+        case .wrapper: return "wrapper creation"
+        case .finalize: return "finalizing"
         }
     }
 }

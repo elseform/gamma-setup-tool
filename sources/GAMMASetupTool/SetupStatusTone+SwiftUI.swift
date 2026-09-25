@@ -9,10 +9,6 @@ extension SetupStatusTone {
             return .yellow
         case .error:
             return .red
-        case .secondary:
-            return .secondary
-        case .accent:
-            return .blue
         }
     }
 }

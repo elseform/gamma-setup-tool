@@ -13,8 +13,7 @@ extension AppModel {
         SetupConfiguration(
             appName: appName,
             installDirectory: installDirectory,
-            programBatch: programBatch,
-            launchBatches: launchBatches,
+            customLaunchExecutablePath: customLaunchExecutablePath,
             saveVerboseLog: saveVerboseLog,
             manualModOrganizerPath: manualModOrganizerPath
         )
@@ -39,14 +38,6 @@ extension AppModel {
         SetupConfiguration(appName: appName, installDirectory: installDirectory).outputAppPath
     }
 
-    var wrapperStageTitle: String {
-        "Create wrapper"
-    }
-
-    var environmentOK: Bool {
-        configuration.environmentOK
-    }
-
     var wrapperNameIsValid: Bool {
         configuration.wrapperNameIsValid && !FileManager.default.fileExists(atPath: outputAppPath)
     }
@@ -69,20 +60,12 @@ extension AppModel {
         return ""
     }
 
-    var createFlowEnvironmentOK: Bool {
-        configuration.createFlowEnvironmentOK
-    }
-
     /// An empty wineEngineArchivePath is valid on its own: the engine then
     /// resolves and downloads the newest published gamma-wine-engine release
     /// (see WineEngineSetup.resolveArchive). A non-empty path is an explicit
     /// local override, still gated the same way a downloaded release is.
     var setupReady: Bool {
-        configuration.createFlowEnvironmentOK
-            && driveMappingReady
-            && wrapperNameIsValid
-            && selectedLaunchExecutableFound
-            && !zstdMissing
+        selectedLaunchExecutableFound && wrapperNameIsValid && !zstdMissing
     }
 
     /// Published releases and most local builds are `.tar.zst`, which neither
@@ -92,10 +75,6 @@ extension AppModel {
         let archive = wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines)
         let needsZstd = archive.isEmpty || ZstdLocator.isRequired(forArchiveNamed: archive)
         return needsZstd && ZstdLocator.locate() == nil
-    }
-
-    var selectedModOrganizerExecutableFound: Bool {
-        configuration.selectedModOrganizerExecutableFound
     }
 
     var selectedLaunchExecutablePath: String {
@@ -108,25 +87,6 @@ extension AppModel {
 
     var selectedLaunchExecutableFound: Bool {
         configuration.selectedLaunchExecutableFound
-    }
-
-    var launchConfigurationIsValid: Bool {
-        selectedLaunchExecutableFound
-    }
-
-    var launchSelectionMessage: String {
-        if !selectedLaunchExecutableFound {
-            return "Selected executable was not found."
-        }
-        return "The wrapper launches this executable. Launch arguments are set in the Configurator."
-    }
-
-    var requiredToolsOK: Bool {
-        configuration.requiredToolsOK
-    }
-
-    var primaryButtonTitle: String {
-        "Create wrapper"
     }
 
     var createHeaderTitle: String {
@@ -179,16 +139,4 @@ extension AppModel {
     var plannedWineDriveMapping: String {
         configuration.plannedWineDriveMapping
     }
-
-    var driveMappingReady: Bool {
-        configuration.driveMappingReady
-    }
-
-    var environmentMessage: String {
-        if !selectedModOrganizerExecutableFound {
-            return "Select the ModOrganizer folder."
-        }
-        return ""
-    }
-
 }

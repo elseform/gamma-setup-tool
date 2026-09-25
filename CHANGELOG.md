@@ -43,6 +43,11 @@
   change.
 - Removed the launch-flags field. Launch arguments belong to the wrapper and are set in
   its Configurator.
+- Removed the D3DMetal backend option from `interactive_setup.py` (backend prompt,
+  `--backend`/`--dxmt-only`, launcher branches, D3DMetal settings and the d3d10
+  override); wrappers always use DXMT. Removed the setup-time winetricks `verbs`
+  runtime mode (`--runtime-mode`), which no DXMT-only engine could reach; the wrapper's
+  own `Contents/MacOS/winetricks` launcher is unchanged.
 
 ## 0.86 — 2026-08-07
 

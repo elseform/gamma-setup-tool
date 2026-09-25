@@ -47,49 +47,22 @@ public struct SetupEngineEvent: Codable {
     }
 }
 
-/// A custom launch target (an alternative to launching through MO2) —
-/// still used by the wizard's "select any Windows executable" flow.
-public struct LaunchBatch: Codable, Identifiable, Equatable {
-    public var id: String { batchPath }
-    public var batchPath: String
-    public var executablePath: String
-    public var workingDirectory: String
-    public var usesModOrganizerEnvironment: Bool?
-
-    public init(
-        batchPath: String,
-        executablePath: String,
-        workingDirectory: String = "",
-        usesModOrganizerEnvironment: Bool = false
-    ) {
-        self.batchPath = batchPath
-        self.executablePath = executablePath
-        self.workingDirectory = workingDirectory
-        self.usesModOrganizerEnvironment = usesModOrganizerEnvironment
-    }
-}
-
 /// Request shape for the gamma-wine-engine-backed pipeline
 /// (interactive_setup.py) — the only pipeline gamma-setup-tool drives.
-/// USVFS stays (MO2 still needs virtualization under this engine); there
-/// is no GPTK4 field because the engine's own archive already carries
-/// whichever D3DMetal/DXMT backend support it needs.
+/// USVFS stays (MO2 still needs virtualization under this engine). The
+/// graphics backend is always DXMT and the runtime DLLs always come from the
+/// engine's redist manifest, so neither has a field. Keys an older request
+/// file still carries (`backend`, `runtimeMode`, `dxmtOnly`,
+/// `releaseArchiveURL`) are ignored when decoding.
 public struct WineEngineSetupRequest: Codable {
+    /// A local engine archive; nil or empty resolves and downloads the newest
+    /// published gamma-wine-engine release.
     public var archivePath: String?
-    /// Superseded by automatic release resolution (EngineReleaseResolver):
-    /// with archivePath empty, WineEngineSetup now resolves and downloads the
-    /// newest published gamma-wine-engine release on its own. Kept, and still
-    /// decoded, only so an old request file with this field set doesn't fail
-    /// to decode; nothing sets or reads it any more.
-    public var releaseArchiveURL: String?
     public var appName: String
     public var appParent: String
     public var gammaRoot: String
     public var mo2Path: String
     public var exeRelPath: String?
-    public var backend: String
-    public var runtimeMode: String
-    public var dxmtOnly: Bool
     public var yes: Bool
     public var skipFinderAlias: Bool
     public var forceExe: Bool
@@ -106,15 +79,11 @@ public struct WineEngineSetupRequest: Codable {
 
     public init(
         archivePath: String? = nil,
-        releaseArchiveURL: String? = nil,
         appName: String = "GAMMA",
         appParent: String = NSString(string: "~/Applications").expandingTildeInPath,
         gammaRoot: String = "",
         mo2Path: String = "",
         exeRelPath: String? = nil,
-        backend: String = "dxmt",
-        runtimeMode: String = "redist",
-        dxmtOnly: Bool = false,
         yes: Bool = true,
         skipFinderAlias: Bool = false,
         forceExe: Bool = false,
@@ -124,15 +93,11 @@ public struct WineEngineSetupRequest: Codable {
         logFile: String? = nil
     ) {
         self.archivePath = archivePath
-        self.releaseArchiveURL = releaseArchiveURL
         self.appName = appName
         self.appParent = appParent
         self.gammaRoot = gammaRoot
         self.mo2Path = mo2Path
         self.exeRelPath = exeRelPath
-        self.backend = backend
-        self.runtimeMode = runtimeMode
-        self.dxmtOnly = dxmtOnly
         self.yes = yes
         self.skipFinderAlias = skipFinderAlias
         self.forceExe = forceExe

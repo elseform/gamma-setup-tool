@@ -40,10 +40,8 @@ public enum EngineArchiveRefusal: Equatable, CustomStringConvertible {
 }
 
 public enum EngineArchiveGate {
-    /// `floor` is `nil` when no floor could be established at all (no
-    /// network and no cache and a broken compiled default) — callers should
-    /// treat that as its own hard error before reaching this gate; passing a
-    /// concrete floor is what every real caller does.
+    /// `floor` always exists: `EngineFloor` falls back to the compiled
+    /// minimum when there is neither a live nor a cached release.
     public static func evaluate(
         manifest: EngineManifest,
         archiveName: String?,

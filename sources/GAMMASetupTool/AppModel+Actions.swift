@@ -22,7 +22,6 @@ extension AppModel {
         if wineEngineArchivePath.isEmpty, let detected = Self.devArchiveFromEnvironment() {
             wineEngineArchivePath = detected
         }
-        useDefaultLaunchConfiguration()
     }
 
     /// Local-build prefill for development only, opted into by setting
@@ -53,18 +52,6 @@ extension AppModel {
     }
 
     // MARK: - Selection
-
-    func chooseInstallDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: installDirectory)
-        if panel.runModal() == .OK, let url = panel.url {
-            installDirectory = url.path
-        }
-    }
 
     /// No `.tar.zst`/`.tar.xz` UTType exists to filter on, so this is an
     /// unrestricted file picker (mirrors interactive_setup.py's own
@@ -102,12 +89,6 @@ extension AppModel {
         }
     }
 
-    func prepareNewWrapperFlow() {
-        appName = "stalker-gamma"
-        installDirectory = SetupConfiguration.defaultInstallDirectory
-        useDefaultLaunchConfiguration()
-    }
-
     func chooseLaunchExecutable() {
         let panel = NSOpenPanel()
         panel.title = "Choose Windows executable"
@@ -122,64 +103,10 @@ extension AppModel {
         let detectedModOrganizerPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
         if !detectedModOrganizerPath.isEmpty,
            URL(fileURLWithPath: detectedModOrganizerPath).standardizedFileURL == url.standardizedFileURL {
-            useModOrganizerLaunch()
+            customLaunchExecutablePath = nil
         } else {
-            setLaunchExecutable(url.path)
+            customLaunchExecutablePath = url.path
         }
-    }
-
-    func useModOrganizerLaunch() {
-        programBatch = "/mo2.bat"
-        launchBatches.removeAll()
-    }
-
-    func useDefaultLaunchConfiguration() {
-        useModOrganizerLaunch()
-    }
-
-    func setLaunchExecutable(_ executablePath: String) {
-        let executable = URL(fileURLWithPath: executablePath)
-        let batchPath = uniqueBatchPath(for: executable)
-        let detectedMO2 = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matchesDetectedMO2 = !detectedMO2.isEmpty
-            && URL(fileURLWithPath: detectedMO2).standardizedFileURL == executable.standardizedFileURL
-        let usesMOEnv = matchesDetectedMO2
-            || executable.lastPathComponent.caseInsensitiveCompare("ModOrganizer.exe") == .orderedSame
-        let batch = LaunchBatch(
-            batchPath: batchPath,
-            executablePath: executablePath,
-            workingDirectory: executable.deletingLastPathComponent().path,
-            usesModOrganizerEnvironment: usesMOEnv
-        )
-        launchBatches = [batch]
-        programBatch = batch.batchPath
-    }
-
-    private func normalizedBatchPath(_ path: String) -> String {
-        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "/mo2.bat" }
-        return trimmed.hasPrefix("/") ? trimmed : "/" + trimmed
-    }
-
-    private func uniqueBatchPath(for executable: URL) -> String {
-        let folderName = executable
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .lastPathComponent
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let executableName = executable.deletingPathExtension().lastPathComponent.lowercased()
-        var name = folderName.isEmpty ? executable.deletingPathExtension().lastPathComponent : folderName
-        if executableName.contains("avx") {
-            name += " - AVX"
-        }
-        var candidate = normalizedBatchPath("\(name).bat")
-        var index = 2
-        let existing = Set(["/mo2.bat"] + launchBatches.map(\.batchPath))
-        while existing.contains(candidate) {
-            candidate = normalizedBatchPath("\(name) \(index).bat")
-            index += 1
-        }
-        return candidate
     }
 
     func createWineEngine() async -> Bool {
@@ -221,22 +148,6 @@ extension AppModel {
         return succeeded
     }
 
-    func resetForNewWrapper() {
-        logText = ""
-        savedLogPath = ""
-        statusText = "Ready"
-        progress = 0
-        frozenSetupSummaryItems = nil
-        installStageIndex = -1
-        installStageCompletedIndex = -1
-        installFailed = false
-        showOutput = false
-    }
-
-    func openCreatedApp() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: outputAppPath))
-    }
-
     func showExistingApp() {
         guard outputAppAlreadyExists else { return }
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: outputAppPath)])
@@ -258,5 +169,4 @@ extension AppModel {
             NSWorkspace.shared.open(logURL)
         }
     }
-
 }

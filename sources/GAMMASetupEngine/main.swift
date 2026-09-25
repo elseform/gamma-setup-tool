@@ -20,7 +20,7 @@ func argumentValue(_ name: String, in arguments: [String]) -> String? {
 
 func loadWineEngineRequest(from arguments: [String]) throws -> WineEngineSetupRequest {
     guard let path = argumentValue("--request-file", in: arguments) else {
-        throw SetupEngineError.message("--request-file is required")
+        throw WineEngineSetupError.message("--request-file is required")
     }
     let data = try Data(contentsOf: URL(fileURLWithPath: path))
     return try JSONDecoder().decode(WineEngineSetupRequest.self, from: data)
@@ -44,15 +44,10 @@ do {
     case "-h", "--help":
         print(usage())
     default:
-        throw SetupEngineError.message("unknown command: \(command)")
+        throw WineEngineSetupError.message("unknown command: \(command)")
     }
 } catch {
-    let message: String
-    if let setup = error as? SetupEngineError {
-        message = setup.description
-    } else {
-        message = error.localizedDescription
-    }
+    let message = error.localizedDescription
     reporter.completed(success: false, message: message)
     FileHandle.standardError.write(Data(("error: \(message)\n").utf8))
     exit(1)

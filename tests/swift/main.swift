@@ -65,9 +65,9 @@ run("testOutputAppPathAddsAppSuffix", config.testOutputAppPathAddsAppSuffix)
 run("testOutputAppPathDoesNotDuplicateAppSuffix", config.testOutputAppPathDoesNotDuplicateAppSuffix)
 run("testDefaultOutputAppPathUsesApplicationsFolder", config.testDefaultOutputAppPathUsesApplicationsFolder)
 run("testWrapperNameValidationRejectsUnsafeNames", config.testWrapperNameValidationRejectsUnsafeNames)
-run("testEnvironmentOKRequiresAnExistingModOrganizerExecutable", config.testEnvironmentOKRequiresAnExistingModOrganizerExecutable)
+run("testModOrganizerTargetRequiresAnExistingExecutable", config.testModOrganizerTargetRequiresAnExistingExecutable)
 run("testLaunchExecutableFallsBackToBareModOrganizerName", config.testLaunchExecutableFallsBackToBareModOrganizerName)
-run("testCustomLaunchExecutableIsResolvedThroughItsBatch", config.testCustomLaunchExecutableIsResolvedThroughItsBatch)
+run("testCustomLaunchExecutableReplacesModOrganizer", config.testCustomLaunchExecutableReplacesModOrganizer)
 run("testCustomLaunchExecutableMustStillExist", config.testCustomLaunchExecutableMustStillExist)
 run("testDriveMappingIsDerivedFromTheResolvedLaunchTarget", config.testDriveMappingIsDerivedFromTheResolvedLaunchTarget)
 run("testDriveMappingIsNotReadyWithoutAResolvedLaunchTarget", config.testDriveMappingIsNotReadyWithoutAResolvedLaunchTarget)
@@ -145,7 +145,6 @@ run("testStopsAcceptingOutputAfterFinish", relay.testStopsAcceptingOutputAfterFi
 
 let tones = SetupStatusToneTests()
 run("testCheckRowTonesMatchEnvironmentColoringRules", tones.testCheckRowTonesMatchEnvironmentColoringRules)
-run("testStatusRowTonesMatchCheckRows", tones.testStatusRowTonesMatchCheckRows)
 
 if failures.isEmpty {
     print("\nAll Swift tests passed.")

@@ -24,8 +24,6 @@ extension ContentView {
             return (model.createHeaderTitle, model.createHeaderSubtitle)
         case .complete:
             return (WrapperCreatedCopy.title, WrapperCreatedCopy.subtitle)
-        default:
-            return ("GAMMA Setup Tool", "")
         }
     }
 
@@ -64,8 +62,6 @@ extension ContentView {
             )
         case .complete:
             CompletePage(model: model)
-        default:
-            EmptyView()
         }
     }
 
@@ -167,7 +163,7 @@ extension ContentView {
                 Button {
                     startCreate()
                 } label: {
-                    Label(model.primaryButtonTitle, systemImage: "play.circle")
+                    Label("Create wrapper", systemImage: "play.circle")
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.return, modifiers: [.command])
@@ -182,8 +178,6 @@ extension ContentView {
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.return, modifiers: [.command])
             .help("Reveal the wrapper in Finder and quit GAMMA Setup Tool")
-        default:
-            EmptyView()
         }
     }
 
@@ -210,10 +204,6 @@ extension ContentView {
         return visibleSteps[index + 1]
     }
 
-    func maxStep(_ lhs: WizardStep, _ rhs: WizardStep) -> WizardStep {
-        lhs.rawValue >= rhs.rawValue ? lhs : rhs
-    }
-
     private var canContinue: Bool {
         if model.isRunning {
             return false
@@ -225,12 +215,11 @@ extension ContentView {
     }
 
     private var wrapperNameActionsDisabled: Bool {
-        !model.wrapperNameIsValid || !model.selectedModOrganizerExecutableFound
+        !model.wrapperNameIsValid || !model.selectedLaunchExecutableFound
     }
 
     private func continueToNextStep() {
         guard let next = nextStep else { return }
-        furthestUnlockedStep = next.rawValue > furthestUnlockedStep.rawValue ? next : furthestUnlockedStep
         step = next
     }
 

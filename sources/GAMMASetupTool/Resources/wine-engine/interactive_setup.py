@@ -15,7 +15,7 @@ Standalone — does not call other scripts in this repo. Stdlib-only: no
 third-party Python dependencies, so this still works from just a released
 archive on a machine that has never seen this repo (only `python3` itself,
 plus the same external tools the previous bash version needed: wine, tar,
-zstd, winetricks, codesign, osascript, lsregister).
+zstd, codesign, osascript, lsregister).
 
 Every prompt below has a matching flag (see --help). Any flag given skips
 its prompt; anything left unset still prompts interactively — fully
@@ -35,8 +35,6 @@ import sys
 import tarfile
 import tempfile
 import traceback
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -276,8 +274,7 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
 
 def _drain_and_close(proc: subprocess.Popen) -> None:
     # tarfile's streaming reader stops as soon as it sees the end-of-archive
-    # marker (or, in archive_has_d3dmetal_payload, as soon as it finds what
-    # it's looking for) without reading any trailing block padding zstd has
+    # marker without reading any trailing block padding zstd has
     # already decompressed. Closing the pipe while zstd still has queued
     # output makes its next write() raise SIGPIPE (returncode -13). Draining
     # to real EOF first lets zstd finish and exit on its own.
@@ -320,106 +317,6 @@ def extract_archive(artifact_path: Path, engine_dir: Path) -> None:
         raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.zst or .tar.xz)")
 
 
-def archive_has_d3dmetal_payload(artifact_path: Path) -> bool:
-    # Ground truth for whether offering the d3dmetal backend makes sense at
-    # all: some archives are built --dxmt-only (no lib64/apple_gptk payload)
-    # and picking d3dmetal against one hard-fails at runtime (cxcompatdb has
-    # nothing to load). Scanning member names is enough — no need to extract.
-    name = artifact_path.name
-    if name.endswith(".tar.zst"):
-        zstd_bin = resolve_zstd()
-        if not zstd_bin:
-            raise SetupError(f"zstd is required to inspect {artifact_path} (brew install zstd)")
-        proc = subprocess.Popen([zstd_bin, "-dc", str(artifact_path)], stdout=subprocess.PIPE)
-        try:
-            with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
-                for member in tf:
-                    if "/lib64/apple_gptk/" in member.name:
-                        return True
-            return False
-        finally:
-            _drain_and_close(proc)
-            proc.wait()
-    elif name.endswith(".tar.xz"):
-        with tarfile.open(str(artifact_path), mode="r:xz") as tf:
-            return any("/lib64/apple_gptk/" in member.name for member in tf)
-    else:
-        raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.zst or .tar.xz)")
-
-
-# ---------------------------------------------------------------------------
-# winetricks resolution/execution (setup-time, distinct from the generated
-# app's own Contents/MacOS/winetricks launcher written later)
-# ---------------------------------------------------------------------------
-
-def resolve_winetricks(app_support: Path) -> str:
-    env_bin = os.environ.get("WINETRICKS_BIN")
-    if env_bin and os.access(env_bin, os.X_OK):
-        return env_bin
-    for candidate in ("/opt/homebrew/bin/winetricks", "/usr/local/bin/winetricks"):
-        if os.access(candidate, os.X_OK):
-            return candidate
-    which = shutil.which("winetricks")
-    if which:
-        return which
-    cache_dir = app_support / "cache/winetricks"
-    candidate = cache_dir / "winetricks"
-    if not os.access(candidate, os.X_OK):
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        err("  Downloading current winetricks script...")
-        url = "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"
-        if not _download(url, candidate, retries=2):
-            if candidate.exists():
-                candidate.unlink()
-            return None
-        os.chmod(candidate, 0o755)
-    return str(candidate)
-
-
-def _download(url: str, dest: Path, retries: int = 2) -> bool:
-    last_error = None
-    for _ in range(retries + 1):
-        try:
-            urllib.request.urlretrieve(url, str(dest))
-            return True
-        except (urllib.error.URLError, OSError) as exc:
-            last_error = exc
-    err(f"  download failed: {url}: {last_error}")
-    return False
-
-
-_WINE_WRAPPER_SCRIPT = """#!/usr/bin/env bash
-set -euo pipefail
-binary="$(basename "$0")"
-if [[ "$binary" == "wine64" && ! -x "$GAMMA_WINETRICKS_ENGINE/bin/wine64" ]]; then
-  binary=wine
-fi
-exec arch -x86_64 "$GAMMA_WINETRICKS_ENGINE/bin/$binary" "$@"
-"""
-
-
-def run_winetricks_now(winetricks_bin: str, engine_dir: Path, wineprefix: Path,
-                        app_support: Path, args: list) -> None:
-    with tempfile.TemporaryDirectory(prefix="gamma-winetricks.") as wrap_dir_str:
-        wrap_dir = Path(wrap_dir_str)
-        wrapper = wrap_dir / "wine-wrapper"
-        wrapper.write_text(_WINE_WRAPPER_SCRIPT)
-        os.chmod(wrapper, 0o755)
-        for name in ("wine", "wine64", "wineserver"):
-            (wrap_dir / name).symlink_to("wine-wrapper")
-        env = {
-            "GAMMA_WINETRICKS_ENGINE": str(engine_dir),
-            "WINEPREFIX": str(wineprefix),
-            "WINE": str(wrap_dir / "wine"),
-            "WINE64": str(wrap_dir / "wine64"),
-            "WINESERVER": str(wrap_dir / "wineserver"),
-            "WINELOADER": str(wrap_dir / "wine"),
-            "W_CACHE": str(app_support / "cache/winetricks/downloads"),
-            "PATH": f"{wrap_dir}:{os.environ.get('PATH', '')}",
-        }
-        run([winetricks_bin, *args], env=env, check=True)
-
-
 # ---------------------------------------------------------------------------
 # Generated bundle file templates (tokens avoid clashing with the literal
 # bash ${...} syntax these files must keep for their own runtime).
@@ -441,7 +338,9 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-export GAMMA_GRAPHICS_BACKEND="${GAMMA_GRAPHICS_BACKEND:-@@GRAPHICS_BACKEND@@}"
+# DXMT is the only backend. cxcompatdb defaults to D3DMetal when this is
+# unset, so it is always exported, overriding any stale app.env value.
+export GAMMA_GRAPHICS_BACKEND=dxmt
 export WINEMSYNC="${WINEMSYNC:-1}"
 export WINEESYNC="${WINEESYNC:-1}"
 export ROSETTA_ADVERTISE_AVX="${ROSETTA_ADVERTISE_AVX:-0}"
@@ -451,46 +350,20 @@ export WINEBOOT_HIDE_DIALOG=1
 export LC_ALL="en_US.UTF-8"
 export LANG="en_US.UTF-8"
 
-# D3DMetal needs its framework and shared library located explicitly. Only
-# export them for D3DMetal; forcing them during a DXMT run points the process
-# at the wrong renderer.
-case "$GAMMA_GRAPHICS_BACKEND" in
-  d3dmetal)
-    if [[ -f "$ENGINE_DIR/lib64/apple_gptk/external/libd3dshared.dylib" ]]; then
-      export CX_APPLEGPTK_LIBD3DSHARED_PATH="$ENGINE_DIR/lib64/apple_gptk/external/libd3dshared.dylib"
-    fi
-    if [[ -d "$ENGINE_DIR/lib64/apple_gptk/external/D3DMetal.framework" ]]; then
-      export CX_D3DMETALPATH="$ENGINE_DIR/lib64/apple_gptk/external/D3DMetal.framework"
-    fi
-    ;;
-esac
-
-# NGX/DLSS shim files, per backend: D3DM_ENABLE_METALFX (D3DMetal) and
-# DXMT_ENABLE_NVEXT (DXMT, gates dxgi.cpp's InitializeVendorExtensionNV)
-# each additionally place their own backend's nvngx.dll (D3DMetal's is
-# renamed from nvngx-on-metalfx by install-renderers.sh) and nvapi64.dll
-# directly in the prefix's system32 — some NGX/DLSS detection paths check
-# for the files there, not just Wine's own DLL search path (which already
-# resolves them from lib64/apple_gptk or lib/dxmt via cxcompatdb regardless
-# of these toggles). Whatever was already at those two names in system32
-# gets backed up as <name>.old before being overwritten, and restored the
-# moment neither toggle applies (backend switch or the toggle going back
-# off); a name with no prior file is just removed again on disable.
+# NGX/DLSS shim files: DXMT_ENABLE_NVEXT (gates dxgi.cpp's
+# InitializeVendorExtensionNV) additionally places DXMT's nvngx.dll and
+# nvapi64.dll directly in the prefix's system32 — some NGX/DLSS detection
+# paths check for the files there, not just Wine's own DLL search path
+# (which already resolves them from lib/dxmt via cxcompatdb regardless of
+# this toggle). Whatever was already at those two names in system32 gets
+# backed up as <name>.old before being overwritten, and restored the moment
+# the toggle goes back off; a name with no prior file is just removed again.
 GAMMA_NVNGX_SYSTEM32="$WINEPREFIX/drive_c/windows/system32"
 if [[ -d "$GAMMA_NVNGX_SYSTEM32" ]]; then
   GAMMA_NVNGX_SRC_DIR=""
-  case "$GAMMA_GRAPHICS_BACKEND" in
-    dxmt)
-      if [[ "${DXMT_ENABLE_NVEXT:-1}" == "1" ]]; then
-        GAMMA_NVNGX_SRC_DIR="$ENGINE_DIR/lib/dxmt/x86_64-windows"
-      fi
-      ;;
-    d3dmetal)
-      if [[ "${D3DM_ENABLE_METALFX:-0}" == "1" ]]; then
-        GAMMA_NVNGX_SRC_DIR="$ENGINE_DIR/lib64/apple_gptk/wine/x86_64-windows"
-      fi
-      ;;
-  esac
+  if [[ "${DXMT_ENABLE_NVEXT:-1}" == "1" ]]; then
+    GAMMA_NVNGX_SRC_DIR="$ENGINE_DIR/lib/dxmt/x86_64-windows"
+  fi
   if [[ -n "$GAMMA_NVNGX_SRC_DIR" ]]; then
     for module in nvngx nvapi64; do
       src="$GAMMA_NVNGX_SRC_DIR/$module.dll"
@@ -631,7 +504,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
 fi
-export GAMMA_GRAPHICS_BACKEND="${GAMMA_GRAPHICS_BACKEND:-dxmt}"
+export GAMMA_GRAPHICS_BACKEND=dxmt
 
 echo "engine: $ENGINE_DIR"
 echo "prefix: $WINEPREFIX"
@@ -661,7 +534,7 @@ def load_redist_fetcher(engine_dir: Path):
         raise SetupError(
             "this engine archive predates the redist manifest: it has no "
             "share/gamma/redist-manifest.json and share/gamma/redist-fetch/. "
-            "Use a newer engine build, or select the 'verbs' runtime mode."
+            "Use a newer engine build."
         )
 
     spec = importlib.util.spec_from_file_location("gamma_redist", module_path)
@@ -697,8 +570,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Builds a macOS .app around the packaged GAMMA Wine engine.",
     )
-    parser.add_argument("--dxmt-only", action="store_true",
-                         help="Skip the backend/dependency-mode prompts; use dxmt + redist.")
     parser.add_argument("--json", action="store_true",
                          help="Emit newline-delimited JSON progress events instead of plain text.")
     parser.add_argument("--yes", action="store_true",
@@ -712,8 +583,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-parent", help="Directory to place the .app in.")
     parser.add_argument("--gamma-root", help="Path to game root (G: drive).")
     parser.add_argument("--exe-rel-path", help="Path to the .exe, relative to game root.")
-    parser.add_argument("--backend", choices=["dxmt", "d3dmetal"], help="Graphics backend.")
-    parser.add_argument("--runtime-mode", choices=["redist", "verbs"], help="Runtime dependency source.")
     parser.add_argument("--redist-cache-dir",
                          help=f"Where to cache the redistributable installers (default: {DEFAULT_REDIST_CACHE}).")
     parser.add_argument("--redist-installer-dir", action="append", metavar="DIR",
@@ -754,13 +623,6 @@ def run_setup(args: argparse.Namespace) -> None:
             raise SetupError(f"Not found: {artifact_path}")
         log(f"  Not found: {artifact_path}")
 
-    # Ground truth for the backend choice and paths.json's dxmtOnly, not
-    # args.dxmt_only: most archives are built dxmt-only (no lib64/apple_gptk
-    # payload at all — see pack-engine-artifact.sh's auto-detect), and
-    # offering/recording d3dmetal against one is wrong regardless of whether
-    # --dxmt-only was passed to this script.
-    dxmt_only = args.dxmt_only or not archive_has_d3dmetal_payload(artifact_path)
-
     app_name = prompt("Name for the .app bundle (without .app)", "GAMMA", args.app_name)
     if app_name.endswith(".app"):
         app_name = app_name[: -len(".app")]
@@ -795,44 +657,14 @@ def run_setup(args: argparse.Namespace) -> None:
     exe_rel_dir = str(Path(exe_rel_path).parent)
     exe_run_dir = gamma_root / exe_rel_dir
 
-    if dxmt_only:
-        graphics_backend = "dxmt"
-    else:
-        log("")
-        log("Graphics backend:")
-        log("  1) dxmt      DXMT — D3D11/10 via Metal (default, works for 32-bit too)")
-        log("  2) d3dmetal  Apple D3DMetal — D3D11/12 via Metal (64-bit only)")
-        choice = prompt("Select backend", "1", args.backend)
-        graphics_backend = {"1": "dxmt", "dxmt": "dxmt", "2": "d3dmetal", "d3dmetal": "d3dmetal"}.get(choice)
-        if graphics_backend is None:
-            log(f"  Unrecognized choice '{choice}', using dxmt")
-            graphics_backend = "dxmt"
-
-    if dxmt_only:
-        runtime_mode = "redist"
-    else:
-        log("")
-        log("Runtime dependencies:")
-        log("  1) redist  Fetch the declared DLLs from Microsoft's pinned installers and register fallback overrides (default)")
-        log("  2) verbs   Install required components with winetricks")
-        choice = prompt("Select dependency source", "1", args.runtime_mode)
-        runtime_mode = {
-            "1": "redist", "redist": "redist", "dlls": "redist",
-            "2": "verbs", "verbs": "verbs", "winetricks": "verbs",
-        }.get(choice)
-        if runtime_mode is None:
-            log(f"  Unrecognized choice '{choice}', using redist")
-            runtime_mode = "redist"
-
     retina_mode = "N"
 
     # cxcompatdb checks this on every wine invocation from here on (wineboot,
     # reg add/query, winecfg — not just the final generated game launcher,
-    # whose own app.env-sourced export only takes effect after this exits).
-    # Without it, cxcompatdb falls back to its own default (d3dmetal), which
-    # fails outright against a --dxmt-only engine artifact that has no
-    # lib64/apple_gptk payload at all.
-    os.environ["GAMMA_GRAPHICS_BACKEND"] = graphics_backend
+    # whose own export only takes effect after this exits). Without it,
+    # cxcompatdb falls back to its own default (D3DMetal), which the engine
+    # does not carry.
+    os.environ["GAMMA_GRAPHICS_BACKEND"] = "dxmt"
 
     app_support = Path.home() / "Library/Application Support" / app_name
     wineprefix = app_support / "prefix"
@@ -860,8 +692,6 @@ def run_setup(args: argparse.Namespace) -> None:
     log(f"  Prefix:         {wineprefix}")
     log(f"  Settings:       {config_file}")
     log(f"  Game root:      {gamma_root}")
-    log(f"  Backend:        {graphics_backend}")
-    log(f"  Dependencies:   {runtime_mode}")
     log("")
     if not args.yes:
         if not confirm_yes_no("Proceed?", default_yes=True):
@@ -895,12 +725,8 @@ def run_setup(args: argparse.Namespace) -> None:
         if first_line and first_line[0].strip():
             engine_version = first_line[0].strip()
 
-    if graphics_backend == "d3dmetal":
-        if not (engine_dir / "lib64/apple_gptk/wine").is_dir():
-            raise SetupError("engine has no lib64/apple_gptk/wine")
-    else:
-        if not (engine_dir / "lib/dxmt").is_dir():
-            raise SetupError("engine has no lib/dxmt")
+    if not (engine_dir / "lib/dxmt").is_dir():
+        raise SetupError("engine has no lib/dxmt")
     stage_finished("engine")
 
     # 3. Bootstrap prefix (outside the bundle)
@@ -950,61 +776,22 @@ def run_setup(args: argparse.Namespace) -> None:
     # selects their backend directory before Wine resolves those modules.
     queue_reg(r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", "winemenubuilder.exe", "REG_SZ", "")
 
-    # d3d10 gets a per-app (not global) override, scoped to the game's own
-    # exe: GPTK's own d3d10.dll (always present in the staged payload) trips
-    # a save-game hang (see docs/renderers.md); this pins d3d10 at Wine's
-    # own genuine, independent implementation instead of leaving resolution
-    # to chance. Applies to D3DMetal. The game never calls
-    # D3D10CreateDevice; D3DX11's internal D3D10CreateBlob dependency only
-    # needs Wine's implementation to resolve.
-    if graphics_backend == "d3dmetal":
-        exe_basename = Path(exe_rel_path).name
-        queue_reg(
-            f"HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\{exe_basename}\\DllOverrides",
-            "d3d10", "REG_SZ", "builtin",
-        )
-        log(f"  Added d3d10=builtin override for {exe_basename}")
     stage_finished("driveMapping")
 
-    if runtime_mode == "verbs":
-        stage_started("winetricks", "Step 2.4: Installing DirectX/VC++ components with winetricks...")
-        winetricks_bin = resolve_winetricks(app_support)
-        if not winetricks_bin:
-            raise SetupError("winetricks unavailable. Re-run setup and select redist fallback.")
-        (app_support / "cache/winetricks/downloads").mkdir(parents=True, exist_ok=True)
-        run_winetricks_now(
-            winetricks_bin, engine_dir, wineprefix, app_support,
-            ["-q", "d3dx9_43", "d3dx11_43", "d3dcompiler_43", "d3dcompiler_47", "vcrun2022", "win10", "sound=coreaudio"],
-        )
-        missing_overrides = []
-        for dll in ("d3dx9_43", "d3dx11_43", "d3dcompiler_43", "d3dcompiler_47", "concrt140", "msvcp140", "vcruntime140"):
-            returncode, _ = run(
-                wine_cmd(engine_dir, "reg", "query", r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", "/v", f"*{dll}"),
-                env=wine_env, check=False, quiet=True,
-            )
-            if returncode != 0:
-                err(f"Error: winetricks did not register expected override: *{dll}")
-                missing_overrides.append(dll)
-        if missing_overrides:
-            raise SetupError(
-                "verbs installation completed without its required overrides. "
-                "Use redist fallback only if you explicitly want the fallback policy."
-            )
-    else:
-        stage_started("winetricks", "Step 2.4: Installing DirectX/VC++ redistributables...")
-        # 64-bit only: every file the engine's manifest declares is an
-        # x86_64-windows DLL, each confirmed required against xray-monolith.
-        sys64 = wineprefix / "drive_c/windows/system32"
-        for stem in install_redistributables(engine_dir, sys64, args):
-            queue_reg(r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", f"*{stem}", "REG_SZ", "native,builtin")
-        # Not `winecfg.exe -v win10`: winecfg has no headless "set and
-        # exit" mode — it always opens its GUI window and blocks
-        # indefinitely waiting for someone to close it, hanging any
-        # automated/unattended run. This registry write is exactly what
-        # that flag does internally (winecfg's own Windows-Version setting
-        # is just HKEY_CURRENT_USER\Software\Wine\Version).
-        queue_reg(r"HKEY_CURRENT_USER\Software\Wine", "Version", "REG_SZ", "win10")
-        queue_reg(r"HKEY_CURRENT_USER\Software\Wine\Drivers", "Audio", "REG_SZ", "coreaudio")
+    stage_started("winetricks", "Step 2.4: Installing DirectX/VC++ redistributables...")
+    # 64-bit only: every file the engine's manifest declares is an
+    # x86_64-windows DLL, each confirmed required against xray-monolith.
+    sys64 = wineprefix / "drive_c/windows/system32"
+    for stem in install_redistributables(engine_dir, sys64, args):
+        queue_reg(r"HKEY_CURRENT_USER\Software\Wine\DllOverrides", f"*{stem}", "REG_SZ", "native,builtin")
+    # Not `winecfg.exe -v win10`: winecfg has no headless "set and
+    # exit" mode — it always opens its GUI window and blocks
+    # indefinitely waiting for someone to close it, hanging any
+    # automated/unattended run. This registry write is exactly what
+    # that flag does internally (winecfg's own Windows-Version setting
+    # is just HKEY_CURRENT_USER\Software\Wine\Version).
+    queue_reg(r"HKEY_CURRENT_USER\Software\Wine", "Version", "REG_SZ", "win10")
+    queue_reg(r"HKEY_CURRENT_USER\Software\Wine\Drivers", "Audio", "REG_SZ", "coreaudio")
 
     flush_reg_queue(engine_dir, wineprefix)
     run(wineserver_cmd(engine_dir, "-w"), env=wine_env)
@@ -1052,8 +839,8 @@ def run_setup(args: argparse.Namespace) -> None:
     (app_path / "Contents/Info.plist").write_text(info_plist)
 
     # Settings live outside the bundle: editing them must not break the
-    # signature. Backend-conditional seed — the always-on vars for the chosen
-    # backend plus the GAMMA defaults below; every other optional var stays
+    # signature. The seed is the always-on DXMT vars plus the GAMMA defaults
+    # below; every other optional var stays
     # absent (Configurator's default = disabled). No inline comments:
     # Configurator is the documented interface (the engine's
     # runtime/configurator-gui/Sources/Schema.swift), and on first launch it
@@ -1070,7 +857,7 @@ def run_setup(args: argparse.Namespace) -> None:
             f"export EXE_PATH='{exe_win_path}'",
             f"export EXE_RUN_DIR='{exe_run_dir}'",
             "",
-            f"export GAMMA_GRAPHICS_BACKEND={graphics_backend}",
+            "export GAMMA_GRAPHICS_BACKEND=dxmt",
             "export WINEMSYNC=1",
             "export WINEESYNC=1",
             "export ROSETTA_ADVERTISE_AVX=0",
@@ -1079,28 +866,17 @@ def run_setup(args: argparse.Namespace) -> None:
             'export WINEDEBUG="-all"',
             'export DEFAULT_GAME_ARGS=""',
             "",
+            "export DXMT_METALFX_SPATIAL_SWAPCHAIN=0",
+            "export DXMT_ENABLE_NVEXT=1",
+            'export DXMT_CONFIG="d3d11.sampleNaNToZero=true;"',
         ]
-        if graphics_backend == "d3dmetal":
-            lines += [
-                "export D3DM_ENABLE_METALFX=0",
-                "export D3DM_MAX_FPS=60",
-                "export D3DM_POSITION_INVARIANCE=1",
-                "export D3DM_SAMPLE_NAN_TO_ZERO=1",
-                "export D3DM_FLUSH_POS_INF_TO_NAN=1",
-            ]
-        else:
-            lines += [
-                "export DXMT_METALFX_SPATIAL_SWAPCHAIN=0",
-                "export DXMT_ENABLE_NVEXT=1",
-                'export DXMT_CONFIG="d3d11.sampleNaNToZero=true;"',
-            ]
         config_file.write_text("\n".join(lines) + "\n")
         log(f"  Wrote settings: {config_file}")
 
     launcher_path = app_path / "Contents/MacOS/launcher"
     launcher_path.write_text(render_template(
         _LAUNCHER_TEMPLATE,
-        APP_SUPPORT=app_support, GRAPHICS_BACKEND=graphics_backend,
+        APP_SUPPORT=app_support,
         EXE_WIN_PATH=exe_win_path, EXE_RUN_DIR=exe_run_dir,
     ))
 
@@ -1139,7 +915,9 @@ def run_setup(args: argparse.Namespace) -> None:
     configurator_paths = json.dumps({
         "configFile": str(config_file),
         "stateFile": str(state_file),
-        "dxmtOnly": dxmt_only,
+        # Tells the Configurator not to offer D3DMetal settings; the
+        # engine carries no D3DMetal payload.
+        "dxmtOnly": True,
     })
     (app_path / "Contents/Resources/configurator-paths.json").write_text(configurator_paths)
     configurator_resources = configurator_dst / "Contents/Resources"
@@ -1212,11 +990,6 @@ def run_setup(args: argparse.Namespace) -> None:
     log(f"  Engine:   {engine_dir}  (inside app, read-only)")
     log(f"  Prefix:   {wineprefix}")
     log(f"  Settings: {config_file}")
-    log(f"  Backend:  {graphics_backend}  (change it in app.env, no rebuild needed)")
-    log(f"  Dependencies: {runtime_mode}")
-    if graphics_backend == "d3dmetal":
-        log("  GPTK:     from the engine archive's lib64/apple_gptk")
-        log(f"            d3d10=builtin override added for {Path(exe_rel_path).name}")
     log("")
     log(f'Launch via:  open "{app_path}"')
     log(f'Or CLI:      "{app_path}/Contents/MacOS/launcher" -dbg -nointro')

@@ -4,7 +4,6 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject var model = AppModel()
     @State var step: WizardStep = .wrapperName
-    @State var furthestUnlockedStep = WizardStep.setup
     @State var createButtonSubmitted = false
 
     var body: some View {
@@ -24,12 +23,10 @@ struct ContentView: View {
             footer
         }
         .frame(minWidth: Layout.windowMinimumWidth, minHeight: Layout.windowMinimumHeight)
-        .background(WindowMinimumSize(width: Layout.windowMinimumWidth, height: Layout.windowMinimumHeight))
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: step)
         .onChange(of: model.isRunning) { _, isRunning in
             if isRunning {
                 step = .create
-                furthestUnlockedStep = maxStep(furthestUnlockedStep, .create)
             }
         }
     }

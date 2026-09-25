@@ -8,7 +8,5 @@ enum SetupOptionCopy {
     static let logTitle = "Setup log"
     static let logAction = "Save"
 
-    static var saveDetailedLog: String {
-        "Save setup log"
-    }
+    static let saveDetailedLog = "Save setup log"
 }

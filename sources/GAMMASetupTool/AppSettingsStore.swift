@@ -1,9 +1,5 @@
 import Foundation
 
-#if SWIFT_PACKAGE
-import GAMMASetupCore
-#endif
-
 struct AppSettings: Codable, Equatable {
     var gammaPath: String?
 

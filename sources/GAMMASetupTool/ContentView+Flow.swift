@@ -70,13 +70,13 @@ struct WrapperNamePage: View {
             CheckRow(
                 label: launchExecutableStatusLabel,
                 status: "",
-                ok: model.selectedModOrganizerExecutableFound,
+                ok: model.selectedLaunchExecutableFound,
                 warning: true,
-                detail: model.selectedModOrganizerExecutableFound
+                detail: model.selectedLaunchExecutableFound
                     ? model.selectedLaunchExecutablePath
                     : "Not found — click Choose\u{2026} to locate it"
             ) {
-                Button(model.selectedModOrganizerExecutableFound ? "Change…" : "Choose…") {
+                Button(model.selectedLaunchExecutableFound ? "Change…" : "Choose…") {
                     model.chooseLaunchExecutable()
                 }
                 .accessibilityLabel("Choose launch executable")
@@ -85,9 +85,9 @@ struct WrapperNamePage: View {
     }
 
     private var launchExecutableStatusLabel: String {
-        if model.programBatch != "/mo2.bat" {
+        if model.configuration.usesCustomLaunchExecutable {
             return "\(model.selectedLaunchExecutableLabel) selected"
         }
-        return model.selectedModOrganizerExecutableFound ? "ModOrganizer.exe found" : "Select ModOrganizer.exe"
+        return model.selectedLaunchExecutableFound ? "ModOrganizer.exe found" : "Select ModOrganizer.exe"
     }
 }

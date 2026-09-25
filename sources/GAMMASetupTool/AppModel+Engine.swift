@@ -9,37 +9,14 @@ import GAMMASetupCore
 extension AppModel {
     // MARK: - Request Construction
 
-    /// Reuses the existing MO2 detection (`selectedLaunchExecutablePath`,
-    /// already correct for both the auto-detected and custom-exe cases) and
-    /// appName/installDirectory fields. Backend is hardcoded to "dxmt": the
-    /// engine archives this tool installs (CX26W11-GAMMA-DXMT-<N>) carry no
-    /// D3DMetal payload (`lib64/apple_gptk` is absent), so selecting it would
-    /// hard-fail interactive_setup.py's own backend-presence check. No
-    /// runtime-mode or dxmt-only choice either: redist installs exactly the
-    /// set the engine declares, pinned and checksummed, so there's no reason
-    /// to expose winetricks verbs as an alternative; dxmt-only only matters
-    /// for interactive_setup.py's own *interactive* prompt-skipping —
-    /// irrelevant here since backend and runtime-mode are always passed
-    /// explicitly as flags.
-    ///
-    /// `gammaRoot` is computed directly from the resolved MO2 path — two
-    /// directory levels up (MO2's own folder, then that folder's parent) —
-    /// NOT from `preflight?.shortWineDriveRoot`. That field looked correct
-    /// on paper (same computation, `zShortRoot`, one level above MO2's own
-    /// folder so `ModOrganizer.ini`'s own stored `gamePath=G:\anomaly`-style
-    /// paths resolve once mounted) but `model.preflight` is never actually
-    /// populated anywhere in this app — the `gamma-setup-engine preflight`
-    /// command exists but nothing calls it, so it's always nil. Confirmed
-    /// live: it silently produced an empty `gammaRoot`, which then resolved
-    /// to the *process's own working directory* (this app's own
-    /// Contents/Resources) instead of erroring, since `URL(fileURLWithPath:
-    /// "")` defaults to cwd. Computing directly here avoids depending on
-    /// that dead code path entirely. Also makes the drive letter actually
-    /// stored in a given user's `ModOrganizer.ini` (`Z:` for most, `G:` for
-    /// some) a non-issue without any extra detection: `interactive_setup.py`
-    /// always mounts *both* Z: (host root) and G: (this resolved root)
-    /// unconditionally, so whichever one a given ini already references
-    /// just resolves.
+    /// The launch target is the selected executable (ModOrganizer.exe by
+    /// default). `gammaRoot`, mounted as G:, is two directory levels above
+    /// it — MO2's own folder, then that folder's parent — so the
+    /// `gamePath=G:\\anomaly`-style paths stored in `ModOrganizer.ini`
+    /// resolve. Some installs store `Z:` paths instead; interactive_setup.py
+    /// always mounts both Z: (host root) and G:, so either works. With no
+    /// found target the root stays empty, and the engine refuses the request
+    /// rather than resolving it against its working directory.
     func wineEngineRequest() -> WineEngineSetupRequest {
         let mo2URL = URL(fileURLWithPath: selectedLaunchExecutablePath)
         let gammaRoot = selectedLaunchExecutableFound
@@ -48,18 +25,11 @@ extension AppModel {
         return WineEngineSetupRequest(
             archivePath: wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? nil : wineEngineArchivePath,
-            releaseArchiveURL: nil,
             appName: appName,
             appParent: installDirectory,
             gammaRoot: gammaRoot,
             mo2Path: selectedLaunchExecutablePath,
             exeRelPath: nil,
-            backend: "dxmt",
-            runtimeMode: "redist",
-            // Written into the Configurator's paths file as dxmtOnly. The
-            // Configurator also detects a DXMT-only engine on its own; this
-            // flag can only narrow what it offers, never widen it.
-            dxmtOnly: true,
             yes: true,
             skipFinderAlias: false,
             forceExe: false,

@@ -1,15 +1,12 @@
 import Foundation
 
-#if SWIFT_PACKAGE
-import GAMMASetupCore
-#endif
-
 struct SetupConfiguration {
     static let defaultInstallDirectory = AppSettingsStore.defaultInstallDirectory
     var appName = "stalker-gamma"
     var installDirectory = SetupConfiguration.defaultInstallDirectory
-    var programBatch = "/mo2.bat"
-    var launchBatches: [LaunchBatch] = []
+    /// A Windows executable chosen instead of ModOrganizer.exe; nil launches
+    /// through MO2.
+    var customLaunchExecutablePath: String?
     var saveVerboseLog = true
     var manualModOrganizerPath = ""
 
@@ -31,51 +28,34 @@ struct SetupConfiguration {
         return trimmed.rangeOfCharacter(from: CharacterSet(charactersIn: "/:")) == nil
     }
 
+    var usesCustomLaunchExecutable: Bool {
+        customLaunchExecutablePath != nil
+    }
+
     var selectedLaunchExecutablePath: String {
-        if programBatch == "/mo2.bat" {
-            let manualPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            return manualPath.isEmpty ? "ModOrganizer.exe" : manualPath
+        if let customLaunchExecutablePath {
+            return customLaunchExecutablePath
         }
-        return launchBatches.first { $0.batchPath == programBatch }?.executablePath ?? programBatch
+        let manualPath = manualModOrganizerPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        return manualPath.isEmpty ? "ModOrganizer.exe" : manualPath
     }
 
     var selectedLaunchExecutableLabel: String {
-        if programBatch == "/mo2.bat" { return "ModOrganizer" }
-        return URL(fileURLWithPath: selectedLaunchExecutablePath).lastPathComponent
+        usesCustomLaunchExecutable
+            ? URL(fileURLWithPath: selectedLaunchExecutablePath).lastPathComponent
+            : "ModOrganizer"
     }
 
+    /// Whether a launch target is properly selected: MO2 by default, or a
+    /// custom executable that exists. Every readiness gate in the app reads
+    /// this.
     var selectedLaunchExecutableFound: Bool {
-        if programBatch == "/mo2.bat" {
-            // manualModOrganizerPath is the only source now (no more
-            // preflight-detected fallback — that field was always nil in
-            // practice, see AppModel+Engine.swift's wineEngineRequest()
-            // comment for the full story).
+        if !usesCustomLaunchExecutable {
             return AppSettingsStore.isValidModOrganizerExecutable(selectedLaunchExecutablePath)
         }
         let path = selectedLaunchExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
         return URL(fileURLWithPath: path).pathExtension.caseInsensitiveCompare("exe") == .orderedSame
             && FileManager.default.fileExists(atPath: path)
-    }
-
-    var environmentOK: Bool {
-        selectedModOrganizerExecutableFound
-    }
-
-    var requiredToolsOK: Bool {
-        true
-    }
-
-    // Every other gate in the app (ContentView+Setup.swift,
-    // ContentView+Navigation.swift, ContentView+Flow.swift,
-    // AppModel+Computed.swift) reads this by name expecting "is a launch
-    // target currently properly selected" — MO2 by default, or a custom
-    // exe override.
-    var selectedModOrganizerExecutableFound: Bool {
-        selectedLaunchExecutableFound
-    }
-
-    var createFlowEnvironmentOK: Bool {
-        selectedModOrganizerExecutableFound
     }
 
     // gamma-wine-engine's interactive_setup.py always mounts both Z:
@@ -85,15 +65,13 @@ struct SetupConfiguration {
         optionalGDriveRoot.isEmpty ? "Z: -> /" : "G: -> \(optionalGDriveRoot)"
     }
 
+    /// The G: root: two components above the launch target (MO2's own
+    /// folder, then its parent), empty until a target is found.
     var optionalGDriveRoot: String {
         guard selectedLaunchExecutableFound else { return "" }
         return URL(fileURLWithPath: selectedLaunchExecutablePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .standardizedFileURL.path
-    }
-
-    var driveMappingReady: Bool {
-        !optionalGDriveRoot.isEmpty
     }
 }

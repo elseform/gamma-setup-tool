@@ -82,8 +82,6 @@ cp "$INTERMEDIATE_ENGINE_BINARY" "$ENGINE_BINARY"
 chmod +x "$ENGINE_BINARY"
 
 cp "$SOURCE_RESOURCES_DIR/Anomaly.icns" "$RESOURCES_DIR/GAMMASetupTool.icns"
-cp "$SOURCE_RESOURCES_DIR/Anomaly.icns" "$RESOURCES_DIR/Anomaly.icns"
-cp "$SOURCE_RESOURCES_DIR/MO2.icns" "$RESOURCES_DIR/MO2.icns"
 if [[ -d "$SOURCE_RESOURCES_DIR/usvfs" ]]; then
   rm -rf "$RESOURCES_DIR/usvfs"
   cp -R "$SOURCE_RESOURCES_DIR/usvfs" "$RESOURCES_DIR/usvfs"
@@ -93,8 +91,6 @@ fi
 rm -rf "$RESOURCES_DIR/wine-engine"
 cp -R "$SOURCE_RESOURCES_DIR/wine-engine" "$RESOURCES_DIR/wine-engine"
 chmod +x "$RESOURCES_DIR/wine-engine/interactive_setup.py"
-cp "$SOURCE_RESOURCES_DIR/github.svg" "$RESOURCES_DIR/github.svg"
-cp "$SOURCE_RESOURCES_DIR/discord.svg" "$RESOURCES_DIR/discord.svg"
 
 cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

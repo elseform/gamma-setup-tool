@@ -99,8 +99,6 @@ public final class WineEngineSetup {
             "--app-parent", (request.appParent as NSString).expandingTildeInPath,
             "--gamma-root", (request.gammaRoot as NSString).expandingTildeInPath,
             "--exe-rel-path", exeRelPath,
-            "--backend", request.backend,
-            "--runtime-mode", request.runtimeMode,
         ]
         // The engine archive carries both the manifest and the fetcher, so
         // the only thing this side decides is where installers are cached and
@@ -112,7 +110,6 @@ public final class WineEngineSetup {
             arguments += ["--redist-installer-dir", (installerDirectory as NSString).expandingTildeInPath]
         }
         if request.yes { arguments.append("--yes") }
-        if request.dxmtOnly { arguments.append("--dxmt-only") }
         if request.skipFinderAlias { arguments.append("--skip-finder-alias") }
         if request.forceExe { arguments.append("--force-exe") }
 
@@ -162,11 +159,7 @@ public final class WineEngineSetup {
         if !override.isEmpty {
             return URL(fileURLWithPath: override)
         }
-        var candidates = [
-            scriptRoot.appendingPathComponent("usvfs"),
-            scriptRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/usvfs"),
-            scriptRoot.appendingPathComponent("../../sources/GAMMASetupTool/Resources/usvfs"),
-        ]
+        var candidates = [scriptRoot.appendingPathComponent("usvfs")]
         if let devRepoRoot {
             candidates.append(devRepoRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/usvfs"))
         }
@@ -179,11 +172,7 @@ public final class WineEngineSetup {
     // MARK: - Resource/archive resolution
 
     private func locateScript() throws -> URL {
-        var candidates = [
-            scriptRoot.appendingPathComponent("wine-engine/interactive_setup.py"),
-            scriptRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"),
-            scriptRoot.appendingPathComponent("../../sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"),
-        ]
+        var candidates = [scriptRoot.appendingPathComponent("wine-engine/interactive_setup.py")]
         if let devRepoRoot {
             candidates.append(devRepoRoot.appendingPathComponent("sources/GAMMASetupTool/Resources/wine-engine/interactive_setup.py"))
         }
@@ -257,12 +246,16 @@ public final class WineEngineSetup {
     }
 
     /// MO2 is the primary/default launch target — not the raw game exe
-    /// interactive_setup.py itself defaults to. `mo2Path` (the resolved
-    /// ModOrganizer.exe path, same concept as the existing Sikarugir
-    /// pipeline's `Preflight.mo2Path`) is expressed relative to
-    /// `gammaRoot` and used as the exe-rel-path unless the caller supplies
-    /// an explicit custom-exe override (advanced-settings escape hatch).
+    /// interactive_setup.py itself defaults to. `mo2Path` (the selected
+    /// launch executable, ModOrganizer.exe or a custom one) is expressed
+    /// relative to `gammaRoot` and used as the exe-rel-path unless the
+    /// request supplies an explicit `exeRelPath`.
     private func resolveExeRelPath(request: WineEngineSetupRequest) throws -> String {
+        // An empty path would silently resolve to this process's working
+        // directory.
+        guard !request.gammaRoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw WineEngineSetupError.message("gammaRoot is required")
+        }
         if let override = request.exeRelPath, !override.isEmpty {
             return override
         }

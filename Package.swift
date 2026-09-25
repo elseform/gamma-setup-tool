@@ -35,18 +35,12 @@ let package = Package(
             exclude: ["Resources/wine-engine"],
             resources: [
                 .process("Resources")
-            ],
-            swiftSettings: [
-                .define("SWIFT_PACKAGE")
             ]
         ),
         .executableTarget(
             name: "GAMMASetupEngine",
             dependencies: ["GAMMASetupCore"],
-            path: "sources/GAMMASetupEngine",
-            swiftSettings: [
-                .define("SWIFT_PACKAGE")
-            ]
+            path: "sources/GAMMASetupEngine"
         )
     ]
 )

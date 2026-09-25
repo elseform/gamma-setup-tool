@@ -25,12 +25,11 @@ struct SetupPage: View {
             }
         }
         .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
-        .disabled(!model.selectedModOrganizerExecutableFound || model.isRunning)
-        .opacity((model.selectedModOrganizerExecutableFound && !model.isRunning) ? 1 : 0.45)
+        .disabled(!model.selectedLaunchExecutableFound || model.isRunning)
+        .opacity((model.selectedLaunchExecutableFound && !model.isRunning) ? 1 : 0.45)
     }
 
-    // gamma-wine-engine ships its own engine build — there is no
-    // CX/Sikarugir choice for this pipeline. Left empty (the default), the
+    // Left empty (the default), the
     // newest published gamma-wine-engine release is resolved and downloaded
     // automatically; a path here is an explicit local override, refused the
     // same way a downloaded release is if it is older than the current floor.

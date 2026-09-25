@@ -130,7 +130,7 @@ struct CreatePage: View {
             (2, "Wine prefix", "Preparing the Windows environment"),
             (3, "Drive mapping", model.plannedWineDriveMapping),
             (4, "Runtime dependencies", "Microsoft redistributables"),
-            (5, model.wrapperStageTitle, "Launcher, settings and Configurator"),
+            (5, "Wrapper", "Launcher, settings and Configurator"),
             (6, "Finishing", "Signing the app and checking ModOrganizer USVFS")
         ]
     }

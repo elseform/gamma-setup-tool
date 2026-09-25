@@ -29,21 +29,17 @@ final class SetupConfigurationTests {
         XCTAssertFalse(SetupConfiguration.isValidWrapperName("GAMMA:Test"))
     }
 
-    /// The Preflight-detected MO2 fallback is gone; `manualModOrganizerPath`
-    /// is now the only source, and the file has to actually be there.
-    func testEnvironmentOKRequiresAnExistingModOrganizerExecutable() throws {
+    /// `manualModOrganizerPath` is the only MO2 source, and the file has to
+    /// actually be there.
+    func testModOrganizerTargetRequiresAnExistingExecutable() throws {
         let temp = try makeTempDir("gamma-environment")
         defer { try? FileManager.default.removeItem(at: temp) }
         let mo2 = temp.appendingPathComponent("ModOrganizer.exe")
         FileManager.default.createFile(atPath: mo2.path, contents: Data())
 
-        let config = SetupConfiguration(manualModOrganizerPath: mo2.path)
-        XCTAssertTrue(config.environmentOK)
-        XCTAssertTrue(config.createFlowEnvironmentOK)
-        XCTAssertTrue(config.selectedModOrganizerExecutableFound)
-
-        XCTAssertFalse(SetupConfiguration().environmentOK)
-        XCTAssertFalse(SetupConfiguration(manualModOrganizerPath: mo2.path + ".missing").environmentOK)
+        XCTAssertTrue(SetupConfiguration(manualModOrganizerPath: mo2.path).selectedLaunchExecutableFound)
+        XCTAssertFalse(SetupConfiguration().selectedLaunchExecutableFound)
+        XCTAssertFalse(SetupConfiguration(manualModOrganizerPath: mo2.path + ".missing").selectedLaunchExecutableFound)
     }
 
     func testLaunchExecutableFallsBackToBareModOrganizerName() {
@@ -55,13 +51,12 @@ final class SetupConfigurationTests {
         XCTAssertFalse(config.selectedLaunchExecutableFound)
     }
 
-    func testCustomLaunchExecutableIsResolvedThroughItsBatch() throws {
+    func testCustomLaunchExecutableReplacesModOrganizer() throws {
         let temp = try makeTempDir("gamma-custom-launch")
         defer { try? FileManager.default.removeItem(at: temp) }
         let executable = temp.appendingPathComponent("AnomalyDX11AVX.exe")
         FileManager.default.createFile(atPath: executable.path, contents: Data())
-        let launch = LaunchBatch(batchPath: "/Anomaly.bat", executablePath: executable.path)
-        let config = SetupConfiguration(programBatch: launch.batchPath, launchBatches: [launch])
+        let config = SetupConfiguration(customLaunchExecutablePath: executable.path, manualModOrganizerPath: "/elsewhere/ModOrganizer.exe")
 
         XCTAssertEqual(config.selectedLaunchExecutablePath, executable.path)
         XCTAssertEqual(config.selectedLaunchExecutableLabel, "AnomalyDX11AVX.exe")
@@ -73,17 +68,11 @@ final class SetupConfigurationTests {
         defer { try? FileManager.default.removeItem(at: temp) }
         let executable = temp.appendingPathComponent("AnomalyDX11AVX.exe")
         FileManager.default.createFile(atPath: executable.path, contents: Data())
-        let launch = LaunchBatch(batchPath: "/Anomaly.bat", executablePath: executable.path)
+        let config = SetupConfiguration(customLaunchExecutablePath: executable.path)
 
-        XCTAssertTrue(
-            SetupConfiguration(programBatch: launch.batchPath, launchBatches: [launch])
-                .selectedLaunchExecutableFound
-        )
+        XCTAssertTrue(config.selectedLaunchExecutableFound)
         try FileManager.default.removeItem(at: executable)
-        XCTAssertFalse(
-            SetupConfiguration(programBatch: launch.batchPath, launchBatches: [launch])
-                .selectedLaunchExecutableFound
-        )
+        XCTAssertFalse(config.selectedLaunchExecutableFound)
     }
 
     /// interactive_setup.py mounts both Z: and G: unconditionally, so there is
@@ -102,17 +91,15 @@ final class SetupConfigurationTests {
         let expectedRoot = gamesRoot.standardizedFileURL.path
         XCTAssertEqual(config.optionalGDriveRoot, expectedRoot)
         XCTAssertEqual(config.plannedWineDriveMapping, "G: -> \(expectedRoot)")
-        XCTAssertTrue(config.driveMappingReady)
     }
 
     /// Without a resolved launch target there is no G: root to derive, so the
-    /// mapping falls back to plain Z: and is not considered ready.
+    /// mapping falls back to plain Z:.
     func testDriveMappingIsNotReadyWithoutAResolvedLaunchTarget() {
         let config = SetupConfiguration()
 
         XCTAssertEqual(config.optionalGDriveRoot, "")
         XCTAssertEqual(config.plannedWineDriveMapping, "Z: -> /")
-        XCTAssertFalse(config.driveMappingReady)
     }
 }
 

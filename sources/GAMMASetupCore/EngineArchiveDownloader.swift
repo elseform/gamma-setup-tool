@@ -7,12 +7,7 @@ import CryptoKit
 /// Runs inside `gamma-setup-engine`, so its stdout already is the NDJSON
 /// stream `WineEngineSetup`'s reporter writes — progress goes through the same
 /// `JSONEventReporter`, no separate channel.
-public final class EngineArchiveDownloader: NSObject {
-    public struct Progress {
-        public let bytesWritten: Int64
-        public let totalBytes: Int64
-    }
-
+public final class EngineArchiveDownloader {
     private let cacheDirectory: URL
     private let reporter: JSONEventReporter
     private let fileManager = FileManager.default

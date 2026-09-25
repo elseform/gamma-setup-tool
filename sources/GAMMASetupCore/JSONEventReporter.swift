@@ -1,15 +1,4 @@
-import Darwin
 import Foundation
-
-public enum SetupEngineError: Error, CustomStringConvertible {
-    case message(String)
-
-    public var description: String {
-        switch self {
-        case .message(let value): return value
-        }
-    }
-}
 
 public final class JSONEventReporter {
     private let encoder = JSONEncoder()

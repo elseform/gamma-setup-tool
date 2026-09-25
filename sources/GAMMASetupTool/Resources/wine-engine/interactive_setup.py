@@ -868,7 +868,7 @@ def run_setup(args: argparse.Namespace) -> None:
             "",
             "export DXMT_METALFX_SPATIAL_SWAPCHAIN=0",
             "export DXMT_ENABLE_NVEXT=1",
-            'export DXMT_CONFIG="d3d11.sampleNaNToZero=true;"',
+            'export DXMT_CONFIG="d3d11.displaySync=true;d3d11.sampleNaNToZero=true;"',
         ]
         config_file.write_text("\n".join(lines) + "\n")
         log(f"  Wrote settings: {config_file}")

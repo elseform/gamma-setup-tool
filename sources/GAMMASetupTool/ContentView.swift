@@ -7,7 +7,7 @@ import GAMMASetupCore
 struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = AppModel()
-    @State private var step: WizardStep = .wrapperName
+    @State private var step: WizardStep = .welcome
     @State private var createButtonSubmitted = false
 
     var body: some View {
@@ -41,16 +41,15 @@ extension ContentView {
 
     private var headerText: (title: String, subtitle: String) {
         switch step {
-        case .wrapperName:
+        case .welcome:
             return (
-                "Create GAMMA wrapper",
-                "Name the wrapper and choose ModOrganizer.exe or another Windows executable."
+                "Welcome to GAMMA Setup Tool",
+                "You need existing GAMMA installation to proceed."
             )
-
         case .setup:
             return (
-                "Wrapper settings",
-                "Review the engine archive and options, then continue."
+                "Options",
+                "Select sources and confirm installation options."
             )
         case .create:
             return (model.createHeaderTitle, model.createHeaderSubtitle)
@@ -69,6 +68,12 @@ extension ContentView {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            if let progress = stepProgress {
+                Text("Step \(progress.current) of \(progress.total)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
         }
         .padding(.horizontal, Layout.headerHorizontalPadding)
         .padding(.top, Layout.headerTopPadding)
@@ -83,8 +88,8 @@ extension ContentView {
     @ViewBuilder
     private var currentStepView: some View {
         switch step {
-        case .wrapperName:
-            WrapperNamePage(model: model)
+        case .welcome:
+            WelcomePage(model: model)
         case .setup:
             SetupPage(model: model)
         case .create:
@@ -141,7 +146,6 @@ extension ContentView {
 
     private var footerLinks: some View {
         let sourceURL = URL(string: "https://github.com/elseform/gamma-setup-tool")!
-        let supportURL = URL(string: "https://discord.com/channels/912320241713958912/1315449108797980762")!
 
         return HStack(spacing: 12) {
             Link("GitHub - elseform", destination: sourceURL)
@@ -149,17 +153,17 @@ extension ContentView {
                 .foregroundStyle(.secondary)
                 .help("Open the GAMMA Setup Tool repository by elseform")
 
-            Link("Discord support", destination: supportURL)
+            Link(SupportCopy.discordTitle, destination: SupportCopy.discordURL)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .help("Discord support thread")
+                .help(SupportCopy.discordHelp)
 
         }
     }
 
     @ViewBuilder
     private var footerBackButton: some View {
-        if step != .wrapperName && step != .complete && !model.isRunning && !createButtonSubmitted {
+        if step != .welcome && step != .complete && !model.isRunning && !createButtonSubmitted {
             Button("Back") {
                 if let previous = previousStep {
                     step = previous
@@ -172,7 +176,7 @@ extension ContentView {
     @ViewBuilder
     private var footerPrimaryButton: some View {
         switch step {
-        case .wrapperName:
+        case .welcome:
             Button {
                 continueToNextStep()
             } label: {
@@ -182,24 +186,10 @@ extension ContentView {
             .keyboardShortcut(.defaultAction)
             .disabled(wrapperNameActionsDisabled)
         case .setup:
-            Button {
-                continueToNextStep()
-            } label: {
-                Label("Review settings", systemImage: "arrow.right.circle")
-            }
-            .buttonStyle(.borderedProminent)
-            .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(!canContinue)
+            createButton(title: "Create app")
         case .create:
-            if !model.isRunning && !createButtonSubmitted {
-                Button {
-                    startCreate()
-                } label: {
-                    Label("Create wrapper", systemImage: "play.circle")
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(model.isRunning || !model.setupReady)
+            if model.installFailed && !model.isRunning && !createButtonSubmitted {
+                createButton(title: "Try again")
             }
         case .complete:
             Button {
@@ -213,13 +203,33 @@ extension ContentView {
         }
     }
 
+    private func createButton(title: String) -> some View {
+        Button {
+            startCreate()
+        } label: {
+            Label(title, systemImage: "play.circle")
+        }
+        .buttonStyle(.borderedProminent)
+        .keyboardShortcut(.return, modifiers: [.command])
+        .disabled(model.isRunning || createButtonSubmitted || !model.setupReady)
+    }
+
     // MARK: - Navigation State
 
+    /// Pages Back/Continue move between. `.create` is reached only by
+    /// starting a run; Back from it (after a failure) returns to Options.
     private var visibleSteps: [WizardStep] {
         if step == .complete {
             return []
         }
-        return [.wrapperName, .setup, .create]
+        return [.welcome, .setup, .create]
+    }
+
+    /// The "Step N of M" counter covers only the pages that ask for input.
+    private var stepProgress: (current: Int, total: Int)? {
+        let counted: [WizardStep] = [.welcome, .setup]
+        guard let index = counted.firstIndex(of: step) else { return nil }
+        return (index + 1, counted.count)
     }
 
     private var currentStepIndex: Int? {
@@ -234,16 +244,6 @@ extension ContentView {
     private var nextStep: WizardStep? {
         guard let index = currentStepIndex, index + 1 < visibleSteps.count else { return nil }
         return visibleSteps[index + 1]
-    }
-
-    private var canContinue: Bool {
-        if model.isRunning {
-            return false
-        }
-        if step == .setup {
-            return nextStep != nil && model.setupReady
-        }
-        return nextStep != nil
     }
 
     private var wrapperNameActionsDisabled: Bool {

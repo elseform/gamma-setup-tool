@@ -1,5 +1,9 @@
 import SwiftUI
 
+#if SWIFT_PACKAGE
+import GAMMASetupCore
+#endif
+
 struct CardHeading: View {
     let title: String
 
@@ -26,7 +30,7 @@ struct WizardCard<Content: View>: View {
 }
 
 enum WizardStep {
-    case wrapperName
+    case welcome
     case setup
     case create
     case complete
@@ -126,20 +130,52 @@ extension CheckRow where Action == EmptyView {
     }
 }
 
-struct SetupSummaryRow: View {
-    let item: SetupSummaryItem
+/// One line saying what setup does (or did) to ModOrganizer's USVFS files.
+struct USVFSStatusRow: View {
+    let outcome: USVFSUpdater.Outcome?
+    var finished = false
 
     var body: some View {
-        GridRow {
-            Text(item.label)
-                .font(.body)
-                .foregroundStyle(.secondary)
-            Text(item.planned)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .textSelection(.enabled)
-                .lineLimit(2)
-                .truncationMode(.middle)
+        if let outcome {
+            Label {
+                Text(message(for: outcome))
+                    .fixedSize(horizontal: false, vertical: true)
+            } icon: {
+                Image(systemName: symbol(for: outcome))
+                    .foregroundStyle(tint(for: outcome))
+            }
+            .font(.callout)
+            .help("USVFS is the virtual file system Mod Organizer uses to load mods.")
+        }
+    }
+
+    private func message(for outcome: USVFSUpdater.Outcome) -> String {
+        switch outcome {
+        case .notModOrganizer:
+            return "USVFS binaries \(finished ? "were" : "won't be") updated, selected target is not Mod Organizer."
+        case .upToDate:
+            return "USVFS binaries \(finished ? "were" : "are") already up to date."
+        case .updated(_, let replaced, _):
+            let files = replaced.count == 1 ? "1 file" : "\(replaced.count) files"
+            return finished
+                ? "Updated USVFS binaries (\(files)). The originals were backed up to \(USVFSUpdater.backupFolderName) in the Mod Organizer folder."
+                : "USVFS binaries will be updated (\(files)). The originals are backed up first."
+        }
+    }
+
+    private func symbol(for outcome: USVFSUpdater.Outcome) -> String {
+        switch outcome {
+        case .notModOrganizer: return "minus.circle"
+        case .upToDate: return "checkmark.circle.fill"
+        case .updated: return finished ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath.circle.fill"
+        }
+    }
+
+    private func tint(for outcome: USVFSUpdater.Outcome) -> Color {
+        switch outcome {
+        case .notModOrganizer: return .secondary
+        case .upToDate: return .green
+        case .updated: return finished ? .green : .orange
         }
     }
 }

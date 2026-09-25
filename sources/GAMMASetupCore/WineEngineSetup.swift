@@ -193,9 +193,6 @@ public final class WineEngineSetup {
             guard fileManager.fileExists(atPath: url.path) else {
                 throw WineEngineSetupError.message("engine archive not found: \(url.path)")
             }
-            if ZstdLocator.isRequired(forArchiveNamed: url.lastPathComponent), ZstdLocator.locate() == nil {
-                throw WineEngineSetupError.message("cannot install \(url.lastPathComponent): \(ZstdLocator.installHint)")
-            }
             reporter.log("Using local engine archive: \(url.path)")
             return url
         }
@@ -207,11 +204,6 @@ public final class WineEngineSetup {
             throw WineEngineSetupError.message(
                 "no local engine archive selected and could not resolve a published release: \(error.localizedDescription)"
             )
-        }
-        // Fail before a 130 MB download that interactive_setup.py could
-        // not unpack anyway.
-        if ZstdLocator.isRequired(forArchiveNamed: release.archiveName), ZstdLocator.locate() == nil {
-            throw WineEngineSetupError.message("cannot install \(release.archiveName): \(ZstdLocator.installHint)")
         }
         reporter.log("Latest engine release: \(release.version)")
         let manifest = try await fetchReleaseManifest(release.manifestURL)

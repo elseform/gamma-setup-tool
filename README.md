@@ -11,19 +11,17 @@ This README describes the current source. Published builds are available on the 
 - An Apple Silicon Mac running macOS 15 or newer, with Rosetta 2 for the Wine engine.
 - An existing G.A.M.M.A. installation and its `ModOrganizer.exe`, or another Windows executable to launch.
 - Python 3 available to setup. The backend checks `/usr/bin/python3`, `/opt/homebrew/bin/python3`, then `/usr/local/bin/python3`.
-- `zstd` for `.tar.zst` engine archives, including every published release (`brew install zstd`). `.tar.xz` archives are also supported.
 - Internet access for automatic engine resolution and missing runtime downloads. For offline setup, select a local engine archive and provide or cache the runtime files described below.
 
 ## Create a Wrapper
 
 Extract the downloaded setup-tool archive and open `GAMMA Setup Tool.app`, or [build the current source](#build-and-test). Builds made by `build.sh` are ad-hoc signed, not notarized.
 
-1. Enter an application name. The wrapper is created in `~/Applications`; an existing app with the same name is refused.
-2. Click **Choose…** and select `ModOrganizer.exe` from your existing installation. You can select another `.exe` as the launch target instead.
-3. Continue to **Wrapper settings**. Leave **Engine archive** empty for automatic download, or choose a local `.tar.zst` or `.tar.xz` archive.
-4. Optionally expand **Microsoft redistributables** to see which runtime files are already present or choose a folder containing downloaded copies. Leave **Save setup log** enabled for troubleshooting.
-5. Continue to **Review settings**, then click **Create wrapper**.
-6. Launch the created app from Finder. Use the adjacent `<app name> Configurator` alias to change game and graphics settings, including launch arguments.
+1. On the first page, click **Choose…** and select `ModOrganizer.exe` from your existing installation. You can select another `.exe` as the launch target instead. The page then says whether setup will update ModOrganizer's `usvfs` files.
+2. The app name is filled in from the selected executable (`ModOrganizer` for `ModOrganizer.exe`), with `-2`, `-3`, and so on added if an app of that name already exists in `~/Applications`. Change it if you like, then click **Continue**.
+3. On **Options**, the engine is downloaded automatically; expand **Use a local engine file** to choose a local `.tar.xz` archive instead. Optionally expand **Windows components** to see which Microsoft runtime files are already present or choose a folder containing downloaded copies. **Advanced** holds the drive mappings and **Save a setup log**; leave the log enabled for troubleshooting.
+4. Click **Create app**.
+5. Launch the created app from Finder. Use the adjacent `<app name> Configurator` alias to change game and graphics settings, including launch arguments.
 
 Setup checks the selected executable exists; it does not validate the contents or health of the G.A.M.M.A. installation.
 
@@ -75,7 +73,7 @@ Downloads are cached at:
 ~/Library/Application Support/gamma-setup-tool/cache/redist-installers/
 ```
 
-For failed setup, use the detailed log and the Discord support link in the app.
+For failed setup, use the detailed log and the GAMMA Discord link in the app.
 
 ## Build and Test
 
@@ -91,7 +89,7 @@ This compiles the GUI and backend with `swiftc` for Apple Silicon and macOS 15, 
 - `./build.sh clean` removes `dist/`.
 - `./test.sh` runs Swift unit tests, backend CLI integration tests, and a build smoke test. The smoke test runs `build.sh bundle`, which builds `dist/` without installing anything.
 
-Developers can set `GAMMA_ENGINE_ARTIFACTS_DIR` in the app's environment to prefill the local archive field with the most recently modified `.tar.zst` or `.tar.xz` in that directory.
+Developers can set `GAMMA_ENGINE_ARTIFACTS_DIR` in the app's environment to prefill the local archive field with the most recently modified `.tar.xz` in that directory.
 
 ### Source Layout
 

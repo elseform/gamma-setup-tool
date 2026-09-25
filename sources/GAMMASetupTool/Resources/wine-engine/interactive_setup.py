@@ -15,7 +15,7 @@ Standalone — does not call other scripts in this repo. Stdlib-only: no
 third-party Python dependencies, so this still works from just a released
 archive on a machine that has never seen this repo (only `python3` itself,
 plus the same external tools the previous bash version needed: wine, tar,
-zstd, codesign, osascript, lsregister).
+codesign, osascript, lsregister).
 
 Every prompt below has a matching flag (see --help). Any flag given skips
 its prompt; anything left unset still prompts interactively — fully
@@ -272,49 +272,14 @@ def _extract_stripped(tf: tarfile.TarFile, dest: Path) -> None:
             tf.extract(member, path=str(dest))
 
 
-def _drain_and_close(proc: subprocess.Popen) -> None:
-    # tarfile's streaming reader stops as soon as it sees the end-of-archive
-    # marker without reading any trailing block padding zstd has
-    # already decompressed. Closing the pipe while zstd still has queued
-    # output makes its next write() raise SIGPIPE (returncode -13). Draining
-    # to real EOF first lets zstd finish and exit on its own.
-    if proc.stdout:
-        try:
-            while proc.stdout.read(1 << 20):
-                pass
-        except (BrokenPipeError, OSError):
-            pass
-        proc.stdout.close()
-
-
-def resolve_zstd() -> str:
-    for candidate in (shutil.which("zstd"), "/opt/homebrew/bin/zstd", "/usr/local/bin/zstd"):
-        if candidate and os.access(candidate, os.X_OK):
-            return candidate
-    return None
-
-
 def extract_archive(artifact_path: Path, engine_dir: Path) -> None:
+    # .tar.xz only: Python's own lzma module reads it, so no external
+    # decompressor (such as Homebrew's zstd) is needed.
     engine_dir.mkdir(parents=True, exist_ok=True)
-    name = artifact_path.name
-    if name.endswith(".tar.zst"):
-        zstd_bin = resolve_zstd()
-        if not zstd_bin:
-            raise SetupError(f"zstd is required to extract {artifact_path} (brew install zstd)")
-        proc = subprocess.Popen([zstd_bin, "-dc", str(artifact_path)], stdout=subprocess.PIPE)
-        try:
-            with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
-                _extract_stripped(tf, engine_dir)
-        finally:
-            _drain_and_close(proc)
-            returncode = proc.wait()
-            if returncode != 0:
-                raise SetupError(f"zstd exited with status {returncode}")
-    elif name.endswith(".tar.xz"):
-        with tarfile.open(str(artifact_path), mode="r:xz") as tf:
-            _extract_stripped(tf, engine_dir)
-    else:
-        raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.zst or .tar.xz)")
+    if not artifact_path.name.endswith(".tar.xz"):
+        raise SetupError(f"Unsupported engine archive: {artifact_path} (expected .tar.xz)")
+    with tarfile.open(str(artifact_path), mode="r:xz") as tf:
+        _extract_stripped(tf, engine_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -578,7 +543,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                          help="Skip the game-exe existence check (equivalent to answering y).")
     parser.add_argument("--skip-finder-alias", action="store_true",
                          help="Don't create the '<App> Configurator' Finder alias.")
-    parser.add_argument("--archive", help="Path to the engine archive (.tar.zst or .tar.xz).")
+    parser.add_argument("--archive", help="Path to the engine archive (.tar.xz).")
     parser.add_argument("--app-name", help="Name for the .app bundle (without .app).")
     parser.add_argument("--app-parent", help="Directory to place the .app in.")
     parser.add_argument("--gamma-root", help="Path to game root (G: drive).")
@@ -615,7 +580,7 @@ def run_setup(args: argparse.Namespace) -> None:
 
     # 1. Collect paths
     while True:
-        artifact_str = prompt("Path to engine archive (.tar.zst or .tar.xz)", "", args.archive)
+        artifact_str = prompt("Path to engine archive (.tar.xz)", "", args.archive)
         artifact_path = Path(artifact_str).expanduser()
         if artifact_path.is_file():
             break

@@ -110,9 +110,9 @@ public enum EngineReleaseResolver {
     }
 
     private static func resolve(_ release: GitHubRelease) throws -> ResolvedEngineRelease {
-        guard let archive = release.assets.first(where: {
-            $0.name.hasSuffix(".tar.zst") || $0.name.hasSuffix(".tar.xz")
-        }) else {
+        // .tar.xz only: macOS unpacks it with no extra tools. Releases that
+        // carry only a .tar.zst (published before the switch) are skipped.
+        guard let archive = release.assets.first(where: { $0.name.hasSuffix(".tar.xz") }) else {
             throw EngineReleaseResolverError.malformedRelease(release.tagName)
         }
         guard let sha256 = release.assets.first(where: { $0.name == archive.name + ".sha256" }),

@@ -127,7 +127,7 @@ expect_failure "no archive source" "$TMP_ROOT/no-archive.out" "$TMP_ROOT/no-arch
 assert_contains "$TMP_ROOT/no-archive.err" "could not resolve a published release"
 
 printf '==> CLI rejects an archivePath that does not exist\n'
-write_request "$TMP_ROOT/ghost-archive.json" "$TMP_ROOT/ghost.tar.zst" ""
+write_request "$TMP_ROOT/ghost-archive.json" "$TMP_ROOT/ghost.tar.xz" ""
 expect_failure "ghost archive" "$TMP_ROOT/ghost.out" "$TMP_ROOT/ghost.err" \
   -- create-wine-engine --request-file "$TMP_ROOT/ghost-archive.json"
 assert_contains "$TMP_ROOT/ghost.err" "engine archive not found:"

@@ -136,6 +136,27 @@ final class USVFSUpdaterTests {
         XCTAssertEqual(read(second.appendingPathComponent("usvfs_x64.dll")), "second")
     }
 
+    func testPlanReportsEachOutcomeWithoutWriting() throws {
+        let root = try makeTempDirectory()
+        defer { try? fileManager.removeItem(at: root) }
+        let source = try makeSource(in: root)
+        let bin = try makeDirectory("bin", in: root, withModOrganizer: false)
+        let mo2 = try makeDirectory("mo2", in: root, withModOrganizer: true)
+        try write("old-proxy", to: mo2.appendingPathComponent("usvfs_proxy_x64.exe"))
+        let before = try fileManager.contentsOfDirectory(atPath: mo2.path).sorted()
+
+        XCTAssertEqual(try updater.plan(modOrganizerDirectory: bin, from: source), .notModOrganizer(bin))
+        XCTAssertEqual(
+            try updater.plan(modOrganizerDirectory: mo2, from: source),
+            .updated(modOrganizerDirectory: mo2, replaced: USVFSUpdater.binaryNames, backupDirectory: nil)
+        )
+        XCTAssertEqual(try fileManager.contentsOfDirectory(atPath: mo2.path).sorted(), before)
+        XCTAssertEqual(read(mo2.appendingPathComponent("usvfs_proxy_x64.exe")), "old-proxy")
+
+        _ = try updater.update(modOrganizerDirectory: mo2, from: source)
+        XCTAssertEqual(try updater.plan(modOrganizerDirectory: mo2, from: source), .upToDate(mo2))
+    }
+
     func testModOrganizerDetectionIgnoresLetterCase() throws {
         let root = try makeTempDirectory()
         defer { try? fileManager.removeItem(at: root) }

@@ -41,7 +41,7 @@ extension AppModel {
         ) else { return nil }
 
         let candidates = entries.filter {
-            $0.lastPathComponent.hasSuffix(".tar.zst") || $0.lastPathComponent.hasSuffix(".tar.xz")
+            $0.lastPathComponent.hasSuffix(".tar.xz")
         }
 
         return candidates.max { lhs, rhs in
@@ -53,7 +53,7 @@ extension AppModel {
 
     // MARK: - Selection
 
-    /// No `.tar.zst`/`.tar.xz` UTType exists to filter on, so this is an
+    /// No `.tar.xz` UTType exists to filter on, so this is an
     /// unrestricted file picker (mirrors interactive_setup.py's own
     /// unrestricted archive-path prompt).
     func chooseWineEngineArchive() {
@@ -107,11 +107,33 @@ extension AppModel {
         } else {
             customLaunchExecutablePath = url.path
         }
+        if selectedLaunchExecutableFound {
+            suggestAppName()
+        }
+    }
+
+    /// Names the app after the launch executable ("ModOrganizer" for
+    /// ModOrganizer.exe). An app of that name already in the install folder
+    /// gets "-2", "-3", ... appended.
+    func suggestAppName() {
+        let base = URL(fileURLWithPath: selectedLaunchExecutablePath).deletingPathExtension().lastPathComponent
+        let installURL = URL(fileURLWithPath: installDirectory)
+        func exists(_ name: String) -> Bool {
+            FileManager.default.fileExists(atPath: installURL.appendingPathComponent("\(name).app").path)
+        }
+        var candidate = base
+        var suffix = 2
+        while exists(candidate) {
+            candidate = "\(base)-\(suffix)"
+            suffix += 1
+        }
+        appName = candidate
     }
 
     func createWineEngine() async -> Bool {
         isRunning = true
-        frozenSetupSummaryItems = setupSummaryItems
+        refreshUSVFSPlan()
+        usvfsPlanForRun = usvfsPlan
         installStageIndex = 0
         installStageCompletedIndex = -1
         installFailed = false
@@ -137,7 +159,6 @@ extension AppModel {
         if succeeded {
             progress = 1
             statusText = WrapperCreatedCopy.title
-            frozenSetupSummaryItems = nil
             installStageIndex = -1
             installStageCompletedIndex = -1
             installFailed = false
@@ -146,6 +167,37 @@ extension AppModel {
             installFailed = true
         }
         return succeeded
+    }
+
+    // MARK: - USVFS Preview
+
+    /// Mirrors WineEngineSetup.updateUSVFSIfNeeded: the folder checked is
+    /// the launch executable's own, against the usvfs copies bundled in
+    /// this app. Read-only.
+    func refreshUSVFSPlan() {
+        guard selectedLaunchExecutableFound, let source = Self.bundledUSVFSDirectory else {
+            usvfsPlan = nil
+            return
+        }
+        let launchDirectory = URL(fileURLWithPath: (selectedLaunchExecutablePath as NSString).expandingTildeInPath)
+            .deletingLastPathComponent()
+        usvfsPlan = try? USVFSUpdater().plan(modOrganizerDirectory: launchDirectory, from: source)
+    }
+
+    /// build.sh copies Resources/usvfs into the app as a folder; a SwiftPM
+    /// build flattens it into the resource bundle's root.
+    private static var bundledUSVFSDirectory: URL? {
+        let probe = USVFSUpdater.binaryNames[0]
+        if let folder = Bundle.main.resourceURL?.appendingPathComponent("usvfs"),
+           FileManager.default.fileExists(atPath: folder.appendingPathComponent(probe).path) {
+            return folder
+        }
+        return AppResources.bundle.url(forResource: probe, withExtension: nil)?.deletingLastPathComponent()
+    }
+
+    func copyLog() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(logText, forType: .string)
     }
 
     func showExistingApp() {

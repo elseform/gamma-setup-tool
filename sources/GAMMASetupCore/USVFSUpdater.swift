@@ -38,7 +38,10 @@ public struct USVFSUpdater {
         }
     }
 
-    public func update(modOrganizerDirectory directory: URL, from source: URL) throws -> Outcome {
+    /// What `update` would do, without writing anything. An `.updated`
+    /// result lists the files that would be replaced; its backup directory
+    /// is always nil, since none has been made yet.
+    public func plan(modOrganizerDirectory directory: URL, from source: URL) throws -> Outcome {
         for name in Self.binaryNames where !fileManager.fileExists(atPath: source.appendingPathComponent(name).path) {
             throw WineEngineSetupError.message("missing bundled usvfs binary: \(source.appendingPathComponent(name).path)")
         }
@@ -54,6 +57,14 @@ public struct USVFSUpdater {
         }
         guard !outdated.isEmpty else {
             return .upToDate(directory)
+        }
+        return .updated(modOrganizerDirectory: directory, replaced: outdated, backupDirectory: nil)
+    }
+
+    public func update(modOrganizerDirectory directory: URL, from source: URL) throws -> Outcome {
+        let planned = try plan(modOrganizerDirectory: directory, from: source)
+        guard case .updated(_, let outdated, _) = planned else {
+            return planned
         }
 
         let existing = outdated.filter { fileManager.fileExists(atPath: directory.appendingPathComponent($0).path) }

@@ -8,66 +8,48 @@ struct CreatePage: View {
     // MARK: - Body
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if model.isRunning || createButtonSubmitted || model.installFailed {
-                runStatus
-            } else {
-                setupReviewCard(items: model.setupSummaryItems)
+        VStack(alignment: .leading, spacing: 12) {
+            if !model.installFailed {
+                Text(currentStageTitle)
+                    .font(.title3.weight(.semibold))
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+
+            ProgressView(value: model.progress)
+                .accessibilityLabel("App creation progress")
+
+            WizardCard {
+                installStages
+            }
+
+            if model.installFailed {
+                installFailureView
+            }
+
+            DisclosureGroup("Show technical details", isExpanded: $model.showOutput) {
+                ScrollView {
+                    Text(model.logText.isEmpty ? "No setup output is available yet." : model.logText)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(height: 130)
+                .border(Color(nsColor: .separatorColor))
+                .accessibilityLabel("Setup output")
             }
         }
         .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
     }
 
-    // MARK: - Setup Review
-
-    private func setupReviewCard(items: [SetupSummaryItem]) -> some View {
-        WizardCard {
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 9) {
-                ForEach(items) { item in
-                    SetupSummaryRow(item: item)
-                }
-            }
-            .font(.body)
-            .padding(.vertical, 4)
+    private var currentStageTitle: String {
+        guard installStageRows.indices.contains(model.installStageIndex) else {
+            return model.installStageCompletedIndex >= 0 ? "Almost done\u{2026}" : "Getting started\u{2026}"
         }
-        .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
+        return "\(installStageRows[model.installStageIndex].detail)\u{2026}"
     }
 
     // MARK: - Run Status
-
-    private var runStatus: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if model.isRunning || createButtonSubmitted || model.installFailed {
-                WizardCard {
-                    installStages
-                }
-                .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
-
-                ProgressView(value: model.progress)
-                    .accessibilityLabel("Wrapper creation progress")
-
-                if model.installFailed {
-                    installFailureView
-                }
-            }
-
-            if model.isRunning || model.installFailed || !model.logText.isEmpty {
-                DisclosureGroup("Setup output", isExpanded: $model.showOutput) {
-                    ScrollView {
-                        Text(model.logText.isEmpty ? "No setup output is available yet." : model.logText)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(8)
-                    }
-                    .frame(height: 130)
-                    .border(Color(nsColor: .separatorColor))
-                    .accessibilityLabel("Setup output")
-                }
-            }
-        }
-        .frame(maxWidth: Layout.setupContentWidth, alignment: .topLeading)
-    }
 
     private var installFailureView: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -75,13 +57,13 @@ struct CreatePage: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.red)
             VStack(alignment: .leading, spacing: 5) {
-                Text("Wrapper creation failed")
+                Text("The app couldn't be created")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(.red)
                 if model.savedLogPath.isEmpty {
                     Text(model.saveVerboseLog
-                         ? "The setup log location is unavailable. Expand Setup output and copy any available details."
-                         : "Saving the setup log was turned off. Expand Setup output and copy any available details.")
+                         ? "The setup log location is unavailable. Copy the technical details below instead."
+                         : "Saving the setup log was turned off. Copy the technical details below instead.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -101,9 +83,17 @@ struct CreatePage: View {
                         .help("Open log")
                     }
                 }
-                Text("For help, use Discord support below and share the log or setup output.")
+                Text("Press Try again, or ask for help in the GAMMA Discord and share the log.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Button("Copy details", action: model.copyLog)
+                        .disabled(model.logText.isEmpty)
+                    Link(SupportCopy.discordTitle, destination: SupportCopy.discordURL)
+                        .help(SupportCopy.discordHelp)
+                }
+                .controlSize(.small)
+                .padding(.top, 2)
             }
         }
         .padding(.top, 2)
@@ -125,13 +115,13 @@ struct CreatePage: View {
     // winetricks, wrapper, finalize).
     private var installStageRows: [(stage: Int, title: String, detail: String)] {
         [
-            (0, "Preparing", "Resolving engine archive"),
-            (1, "Engine", "Extracting DXMT engine"),
-            (2, "Wine prefix", "Preparing the Windows environment"),
-            (3, "Drive mapping", model.plannedWineDriveMapping),
-            (4, "Runtime dependencies", "Microsoft redistributables"),
-            (5, "Wrapper", "Launcher, settings and Configurator"),
-            (6, "Finishing", "Signing the app and checking ModOrganizer USVFS")
+            (0, "Preparing", "Finding the game engine"),
+            (1, "Engine", "Unpacking the game engine"),
+            (2, "Windows environment", "Preparing the Windows environment"),
+            (3, "Drives", "Connecting your GAMMA folder"),
+            (4, "Windows components", "Installing Windows components"),
+            (5, "App", "Building the app and its Configurator"),
+            (6, "Finishing", "Finishing up")
         ]
     }
 
@@ -195,54 +185,81 @@ struct CompletePage: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(.green)
-                        Text(WrapperCreatedCopy.title)
-                            .font(.headline)
-                    }
-
-                    Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
-                        GridRow {
-                            Text("Application:")
-                                .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.outputAppName)
+                                .font(.headline)
                             Text(model.outputAppPath)
-                                .lineLimit(2)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
                                 .truncationMode(.middle)
                                 .textSelection(.enabled)
                         }
-                        if model.saveVerboseLog {
-                            GridRow {
-                                Text("Setup log:")
-                                    .foregroundStyle(.secondary)
-                                if model.savedLogPath.isEmpty {
-                                    Text("Log location unavailable")
-                                        .foregroundStyle(.secondary)
-                                } else {
-                                    Button {
-                                        model.openSavedLog()
-                                    } label: {
-                                        Text(model.savedLogPath)
-                                            .lineLimit(1)
-                                            .truncationMode(.middle)
-                                    }
-                                    .buttonStyle(.link)
-                                    .help("Open setup log")
-                                }
-                            }
-                        }
                     }
-                    .font(.callout)
-
-                    Text("Open the new app to launch \(model.selectedLaunchExecutableLabel).")
-                        .font(.callout)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Use the adjacent Configurator alias to change game settings and launch arguments. If the alias is missing, open Configurator.app in the wrapper’s Contents/Resources folder.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    USVFSStatusRow(outcome: model.usvfsPlanForRun, finished: true)
                 }
             }
-            .frame(maxWidth: Layout.completeMaxWidth, alignment: .topLeading)
+
+            WizardCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    CardHeading(title: "Next steps")
+                    ForEach(nextSteps, id: \.number) { step in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Image(systemName: "\(step.number).circle.fill")
+                                .foregroundStyle(.tint)
+                                .accessibilityHidden(true)
+                            Text(step.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+                .font(.callout)
+                .help("If the Configurator alias is missing, open Configurator.app in the app's Contents/Resources folder.")
+            }
+
+            WizardCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text(model.saveVerboseLog
+                             ? "Problems? Ask in the GAMMA Discord and share your setup log."
+                             : "Problems? Ask in the GAMMA Discord.")
+                        Link(SupportCopy.discordTitle, destination: SupportCopy.discordURL)
+                            .help(SupportCopy.discordHelp)
+                    }
+                    if model.saveVerboseLog {
+                        if model.savedLogPath.isEmpty {
+                            Text("Setup log location unavailable")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Button {
+                                model.openSavedLog()
+                            } label: {
+                                Text(model.savedLogPath)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            .buttonStyle(.link)
+                            .help("Open setup log")
+                        }
+                    }
+                }
+                .font(.callout)
+            }
         }
         .frame(maxWidth: Layout.completeMaxWidth, alignment: .topLeading)
+    }
+
+    /// The Configurator alias is "<app name> Configurator", next to the app
+    /// (interactive_setup.py).
+    private var nextSteps: [(number: Int, text: LocalizedStringKey)] {
+        let launch: LocalizedStringKey = model.configuration.usesCustomLaunchExecutable
+            ? "It starts **\(model.selectedLaunchExecutableLabel)**."
+            : "It opens Mod Organizer. Press **Run** there to start the game."
+        return [
+            (1, "Open **\(model.outputAppName)** from ~/Applications. Show in Finder below takes you there."),
+            (2, launch),
+            (3, "The first start can take longer while shaders are prepared."),
+            (4, "To change graphics or launch options, open **\(model.outputAppName) Configurator**, next to the app."),
+        ]
     }
 }

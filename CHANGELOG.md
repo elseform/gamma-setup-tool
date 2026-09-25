@@ -23,9 +23,10 @@
   in the MO2 folder before being replaced.
 - With no local archive selected, setup always downloads the newest published
   `gamma-wine-engine` release, verifies its checksum, and caches it. A local
-  `.tar.zst` or `.tar.xz` archive can be selected instead and is used as is.
-- `.tar.zst` engine archives, including every published release, need `zstd`
-  (`brew install zstd`). The setup page says so and blocks setup when it is missing.
+  `.tar.xz` archive can be selected instead and is used as is.
+- Engine archives are `.tar.xz`, which macOS unpacks without extra tools. `.tar.zst`
+  archives and the `zstd` requirement are gone; releases published only as `.tar.zst`
+  are skipped by the automatic download.
 - A failed setup no longer deletes a Wine prefix or settings file left in
   `~/Library/Application Support/<app name>/` by an earlier wrapper of the same name.
 - A failed ModOrganizer USVFS update after the wrapper is built is reported as a warning
@@ -33,6 +34,19 @@
 - The setup checklist follows the order the steps actually run in, the progress bar
   follows the steps, and the last lines of setup output are no longer lost when setup
   fails.
+
+- The wizard opens on a welcome page where you select `ModOrganizer.exe` (or another
+  executable) and then name the app on the same page. The name is filled in from the
+  executable, with `-2`, `-3`, ... added when that app already exists. The separate review
+  step is gone: **Create app** starts setup from the options page, which lists what setup
+  will do. Engine file,
+  drive-mapping, and log options are collapsed, and wording throughout uses plain
+  language instead of wrapper and engine terms.
+- The name and options pages say whether ModOrganizer's `usvfs` files will be updated,
+  are already up to date, or are left alone; the finish page reports what was done.
+- The finish page lists next steps: where the app is, how it starts the game, and where
+  its Configurator is.
+- The support link is now labeled **GAMMA Discord**.
 
 ### Removals
 

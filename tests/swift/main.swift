@@ -110,6 +110,7 @@ run("testMatchingBinariesAreNotRewrittenOrBackedUp", usvfs.testMatchingBinariesA
 run("testDifferingBinariesAreBackedUpThenReplaced", usvfs.testDifferingBinariesAreBackedUpThenReplaced)
 run("testMissingBinariesAreInstalledWithoutABackup", usvfs.testMissingBinariesAreInstalledWithoutABackup)
 run("testRepeatedUpdatesKeepEarlierBackups", usvfs.testRepeatedUpdatesKeepEarlierBackups)
+run("testPlanReportsEachOutcomeWithoutWriting", usvfs.testPlanReportsEachOutcomeWithoutWriting)
 run("testModOrganizerDetectionIgnoresLetterCase", usvfs.testModOrganizerDetectionIgnoresLetterCase)
 
 let relay = ScriptOutputRelayTests()

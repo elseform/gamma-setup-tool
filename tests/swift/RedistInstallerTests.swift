@@ -16,7 +16,7 @@ final class RedistInstallerTests {
         // Exactly the shape the app wrote before the field existed.
         let json = """
         {
-          "archivePath" : "/tmp/engine.tar.zst",
+          "archivePath" : "/tmp/engine.tar.xz",
           "appName" : "stalker-gamma",
           "appParent" : "/tmp/apps",
           "gammaRoot" : "/tmp/GAMMA",
@@ -41,7 +41,7 @@ final class RedistInstallerTests {
 
     func testRequestRoundTripsASuppliedRedistDirectory() throws {
         let request = WineEngineSetupRequest(
-            archivePath: "/tmp/engine.tar.zst",
+            archivePath: "/tmp/engine.tar.xz",
             redistInstallerDirectory: "/tmp/installers"
         )
         let data = try JSONEncoder().encode(request)
@@ -51,7 +51,7 @@ final class RedistInstallerTests {
     }
 
     func testRequestRoundTripsALogFile() throws {
-        let request = WineEngineSetupRequest(archivePath: "/tmp/engine.tar.zst", logFile: "/tmp/setup.log")
+        let request = WineEngineSetupRequest(archivePath: "/tmp/engine.tar.xz", logFile: "/tmp/setup.log")
         let data = try JSONEncoder().encode(request)
         let decoded = try JSONDecoder().decode(WineEngineSetupRequest.self, from: data)
 

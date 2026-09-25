@@ -45,7 +45,7 @@ final class EngineArchiveTests {
     }
 
     func testParseBuildCounterFromCurrentAndLegacyNames() {
-        XCTAssertEqual(EngineVersionParser.parseBuildCounter(fromName: "CX26W11-GAMMA-DXMT-14.tar.zst"), 14)
+        XCTAssertEqual(EngineVersionParser.parseBuildCounter(fromName: "CX26W11-GAMMA-DXMT-14.tar.xz"), 14)
         XCTAssertEqual(EngineVersionParser.parseBuildCounter(fromName: "CX26W11-Gamma086-4.tar.xz"), 4)
         XCTAssertEqual(EngineVersionParser.parseBuildCounter(fromName: "engine-cx26.3-w11-gamma087-14"), 14)
         // The string-sort trap this exists to avoid: -7 must not "beat" -10.
@@ -59,10 +59,10 @@ final class EngineArchiveTests {
     func testDecodesTheSidecarManifestShape() throws {
         let json = """
         {"schemaVersion":1,"versionLabel":"CX26.3.0-W11-Gamma087","buildNumber":14,
-         "artifact":"CX26W11-GAMMA-DXMT-14.tar.zst","artifactSHA256":"abc123"}
+         "artifact":"CX26W11-GAMMA-DXMT-14.tar.xz","artifactSHA256":"abc123"}
         """
         let manifest = try EngineManifest.decode(from: Data(json.utf8))
-        XCTAssertEqual(manifest.artifact, "CX26W11-GAMMA-DXMT-14.tar.zst")
+        XCTAssertEqual(manifest.artifact, "CX26W11-GAMMA-DXMT-14.tar.xz")
         XCTAssertEqual(manifest.artifactSHA256, "abc123")
     }
 
@@ -89,30 +89,30 @@ final class EngineArchiveTests {
 
     func testPicksTheNewestEngineReleaseByVersionNotArrayOrder() throws {
         let releases = [
-            makeRelease(tag: "engine-cx26.3-w11-gamma087-7", archiveName: "CX26W11-GAMMA-DXMT-7.tar.zst"),
-            makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.zst"),
-            makeRelease(tag: "engine-cx26.3-w11-gamma087-10", archiveName: "CX26W11-GAMMA-DXMT-10.tar.zst"),
+            makeRelease(tag: "engine-cx26.3-w11-gamma087-7", archiveName: "CX26W11-GAMMA-DXMT-7.tar.xz"),
+            makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.xz"),
+            makeRelease(tag: "engine-cx26.3-w11-gamma087-10", archiveName: "CX26W11-GAMMA-DXMT-10.tar.xz"),
         ]
         let resolved = try EngineReleaseResolver.newestEngineRelease(in: releases)
-        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.zst")
+        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.xz")
     }
 
     func testIgnoresReleasesWithoutTheEngineTagPrefix() throws {
         let releases = [
             GitHubRelease(tagName: "v0.86", assets: []),
-            makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.zst"),
+            makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.xz"),
         ]
         let resolved = try EngineReleaseResolver.newestEngineRelease(in: releases)
-        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.zst")
+        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.xz")
     }
 
     func testIgnoresAMalformedReleaseMissingSidecarAssets() throws {
         let malformed = GitHubRelease(tagName: "engine-cx26.3-w11-gamma087-99", assets: [
-            GitHubReleaseAsset(name: "CX26W11-GAMMA-DXMT-99.tar.zst", browserDownloadURL: "https://example.invalid/x"),
+            GitHubReleaseAsset(name: "CX26W11-GAMMA-DXMT-99.tar.xz", browserDownloadURL: "https://example.invalid/x"),
         ])
-        let releases = [malformed, makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.zst")]
+        let releases = [malformed, makeRelease(tag: "engine-cx26.3-w11-gamma087-14", archiveName: "CX26W11-GAMMA-DXMT-14.tar.xz")]
         let resolved = try EngineReleaseResolver.newestEngineRelease(in: releases)
-        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.zst")
+        XCTAssertEqual(resolved.archiveName, "CX26W11-GAMMA-DXMT-14.tar.xz")
     }
 
     func testThrowsWhenNoEngineReleaseExists() {

@@ -38,6 +38,11 @@ extension AppModel {
         SetupConfiguration(appName: appName, installDirectory: installDirectory).outputAppPath
     }
 
+    /// "<name>", as Finder shows the created app (without ".app").
+    var outputAppName: String {
+        URL(fileURLWithPath: outputAppPath).deletingPathExtension().lastPathComponent
+    }
+
     var wrapperNameIsValid: Bool {
         configuration.wrapperNameIsValid && !FileManager.default.fileExists(atPath: outputAppPath)
     }
@@ -65,16 +70,7 @@ extension AppModel {
     /// (see WineEngineSetup.resolveArchive). A non-empty path is a local
     /// archive, used as is.
     var setupReady: Bool {
-        selectedLaunchExecutableFound && wrapperNameIsValid && !zstdMissing
-    }
-
-    /// Published releases and most local builds are `.tar.zst`, which neither
-    /// setup step can unpack without Homebrew's `zstd`. Only a local `.tar.xz`
-    /// works without it.
-    var zstdMissing: Bool {
-        let archive = wineEngineArchivePath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let needsZstd = archive.isEmpty || ZstdLocator.isRequired(forArchiveNamed: archive)
-        return needsZstd && ZstdLocator.locate() == nil
+        selectedLaunchExecutableFound && wrapperNameIsValid
     }
 
     var selectedLaunchExecutablePath: String {
@@ -90,50 +86,14 @@ extension AppModel {
     }
 
     var createHeaderTitle: String {
-        if installFailed {
-            return "Wrapper creation failed"
-        }
-        if isRunning {
-            return "Creating wrapper"
-        }
-        return "Review settings"
+        installFailed ? "Something went wrong" : "Installation in progress"
     }
 
     var createHeaderSubtitle: String {
         if installFailed {
-            return "Check the logs for the failed setup step."
+            return "Setup stopped before the app was finished."
         }
-        if isRunning {
-            return statusText.isEmpty ? "Preparing wrapper creation" : statusText
-        }
-        return "Review your choices, then create the wrapper."
-    }
-
-    var setupSummaryItems: [SetupSummaryItem] {
-        if let frozenSetupSummaryItems {
-            return frozenSetupSummaryItems
-        }
-        return makeSetupSummaryItems()
-    }
-
-    func makeSetupSummaryItems() -> [SetupSummaryItem] {
-        var rows: [SetupSummaryItem] = []
-
-        func add(_ label: String, _ planned: String) {
-            rows.append(SetupSummaryItem(label: label, planned: planned))
-        }
-
-        add("Application", outputAppPath)
-        add("Executable", configuration.selectedLaunchExecutablePath)
-        add("Engine archive", wineEngineArchivePath.isEmpty ? "Automatic (latest release)" : wineEngineArchivePath)
-        add("Graphics backend", "DXMT")
-        add("Game root (G:)", configuration.optionalGDriveRoot)
-        add(SetupOptionCopy.usvfsBinaries, "ModOrganizer folder only; outdated files backed up, then replaced")
-        if saveVerboseLog {
-            add(SetupOptionCopy.logTitle, SetupOptionCopy.logAction)
-        }
-
-        return rows
+        return "This takes a few minutes."
     }
 
     var plannedWineDriveMapping: String {

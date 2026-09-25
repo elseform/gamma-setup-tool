@@ -5,16 +5,10 @@ import Observation
 import GAMMASetupCore
 #endif
 
-struct SetupSummaryItem: Identifiable {
-    var id: String { label }
-    let label: String
-    let planned: String
-}
-
 @MainActor
 @Observable
 final class AppModel {
-    var appName = "stalker-gamma"
+    var appName = ""
     var installDirectory = SetupConfiguration.defaultInstallDirectory
     var customLaunchExecutablePath: String?
     var saveVerboseLog = true
@@ -25,7 +19,12 @@ final class AppModel {
     var isRunning = false
     var showOutput = false
     var progress = 0.0
-    var frozenSetupSummaryItems: [SetupSummaryItem]?
+    /// What setup will do to ModOrganizer's USVFS files, for the selected
+    /// launch target; nil until checked or when the bundled copies are
+    /// unavailable. `usvfsPlanForRun` freezes it when a run starts, since
+    /// a successful run turns every `.updated` into `.upToDate`.
+    var usvfsPlan: USVFSUpdater.Outcome?
+    var usvfsPlanForRun: USVFSUpdater.Outcome?
     var installStageIndex = -1
     var installStageCompletedIndex = -1
     var installFailed = false
@@ -41,5 +40,8 @@ final class AppModel {
 
     init() {
         loadSettings()
+        if selectedLaunchExecutableFound {
+            suggestAppName()
+        }
     }
 }
